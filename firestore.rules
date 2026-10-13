@@ -1,0 +1,100 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // 1. Incoming Bookings: parents create requests, admin reviews, and deletes upon acceptance
+    match /incoming_bookings/{bookingId} {
+      allow read, write: if true;
+    }
+
+    // 2. Parents collection: registered parents, booked tutors, course, fee amounts & assigned tutor
+    match /parents/{parentId} {
+      allow read, write: if true;
+    }
+
+    // 3. Tutors Request collection: initial tutor registrations, removed upon profile completion
+    match /tutors_requests/{tutorRequestId} {
+      allow read, write: if true;
+    }
+
+    // 4. Complete Tutors collection: profile-completed educators with available timings, fee amount & assigned parents
+    match /complete_tutors/{tutorId} {
+      allow read, write: if true;
+    }
+
+    // 5. Withdrawal Notice collection: tutor payout withdrawal requests
+    match /withdrawal_notices/{noticeId} {
+      allow read, write: if true;
+    }
+
+    // 6. Complete Withdrawal collection: accepted & settled tutor payouts (removed from notices)
+    match /complete_withdrawals/{withdrawalId} {
+      allow read, write: if true;
+    }
+
+    // 7. Tutors Review collection: authentic parent & student reviews for tutors
+    match /tutors_reviews/{reviewId} {
+      allow read, write: if true;
+    }
+
+    // 8. Offline Demo Queries collection: admissions and demo class enquiries
+    match /offline_demo_queries/{queryId} {
+      allow read, write: if true;
+    }
+
+    // 9. Gallery Manager collection: institute classroom and student activity images
+    match /gallery_manager/{itemId} {
+      allow read, write: if true;
+    }
+
+    // 10. Success Stories collection: student toppers, achievements, and ranks
+    match /success_stories/{storyId} {
+      allow read, write: if true;
+    }
+
+    // 11. Hero Banners collection: homepage carousel banners
+    match /hero_banners/{bannerId} {
+      allow read, write: if true;
+    }
+
+    // Legacy and companion collections
+    match /teachers/{teacherId} {
+      allow read, write: if true;
+    }
+    match /tutor_bookings/{bookingId} {
+      allow read, write: if true;
+    }
+    match /demo_bookings/{bookingId} {
+      allow read, write: if true;
+    }
+    match /enquiries/{enquiryId} {
+      allow read, write: if true;
+    }
+    match /gallery_items/{itemId} {
+      allow read, write: if true;
+    }
+    match /withdrawal_requests/{requestId} {
+      allow read, write: if true;
+    }
+    match /activity_logs/{logId} {
+      allow read, write: if true;
+    }
+    match /received_fees/{feeId} {
+      allow read, write: if true;
+    }
+    match /offers/{offerId} {
+      allow read, write: if true;
+    }
+    match /_probe/{probeId} {
+      allow read: if true;
+    }
+  }
+}
+

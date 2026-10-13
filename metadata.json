@@ -1,0 +1,6 @@
+{
+  "name": "Kumari Institute",
+  "description": "Kumari Institute in Indira Nagar, Rayagada - A trusted coaching and learning center known for dedicated faculty, structured learning programs, and proven results.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
