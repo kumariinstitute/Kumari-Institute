@@ -1620,34 +1620,6 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                               </span>
                               <span>•</span>
                               <span>Parent: <strong className="text-slate-700">{student.parentName}</strong></span>
-                              {student.parentPhone && (
-                                <>
-                                  <span>•</span>
-                                  <a
-                                    href={`tel:${student.parentPhone}`}
-                                    className="text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
-                                  >
-                                    <Phone className="w-3 h-3 text-blue-500" />
-                                    <span>{student.parentPhone}</span>
-                                  </a>
-                                </>
-                              )}
-                              {student.monthlyFee && (() => {
-                                const fee = Number(student.monthlyFee) || 3000;
-                                const hourly = Math.round(fee / 30);
-                                const fee31 = hourly * 31;
-                                return (
-                                  <>
-                                    <span>•</span>
-                                    <span
-                                      className="text-emerald-700 font-bold"
-                                      title={`₹${fee.toLocaleString('en-IN')}/month`}
-                                    >
-                                      ₹{fee.toLocaleString('en-IN')}/mo ({hourly > 0 ? `₹${hourly}/hr` : ''})
-                                    </span>
-                                  </>
-                                );
-                              })()}
                             </div>
                           </div>
                         </div>
@@ -2299,16 +2271,13 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                     {assignedStudents.length > 0 ? (
                       <div className="space-y-1.5 text-[11px]">
                         {assignedStudents.map((std: any, sIdx: number) => {
-                          const stdFee = Number(std.monthlyFee) || breakdown.defaultMonthlyPerStudent;
-                          const stdHourly = Math.round(stdFee / 30);
+                          const rawMonthly = Number(std.monthlyFee) || (breakdown.tutorHourly * 30);
+                          const netEarnings = Math.round(rawMonthly * 0.8);
                           return (
                             <div key={std.id || sIdx} className="flex justify-between items-center text-slate-600">
                               <span>{std.name} ({std.grade || ''} • {std.subject || ''})</span>
                               <strong className="text-slate-900">
-                                ₹ {stdFee.toLocaleString('en-IN')} / mo{' '}
-                                <span className="text-[10px] text-slate-400 font-normal">
-                                  ({stdHourly}/hr • 30 hrs)
-                                </span>
+                                ₹ {netEarnings.toLocaleString('en-IN')} / mo
                               </strong>
                             </div>
                           );

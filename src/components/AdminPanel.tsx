@@ -2212,32 +2212,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </span>
               </button>
 
-              {/* 11. Hero Banners */}
-              <button
-                type="button"
-                id="admin-tab-hero-banners"
-                onClick={() => {
-                  setActiveTab('hero_banners');
-                  setIsMobileNavOpen(false);
-                }}
-                className={`w-full px-3 py-2.5 rounded-xl font-bold flex items-center justify-between transition-all cursor-pointer text-left ${
-                  activeTab === 'hero_banners'
-                    ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800/80'
-                }`}
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <Layers className="w-4 h-4 shrink-0" />
-                  <span className="truncate">11. Hero Banners</span>
-                </div>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
-                  activeTab === 'hero_banners' ? 'bg-slate-950 text-amber-300' : 'bg-slate-800 text-slate-300'
-                }`}>
-                  {heroBanners.filter((b) => b.active).length} Active
-                </span>
-              </button>
-
-              {/* 12. Offers & Marquee */}
+              {/* 11. Offers & Marquee */}
               <button
                 type="button"
                 id="admin-tab-offers"
@@ -2253,43 +2228,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <Flame className="w-4 h-4 shrink-0 text-amber-400" />
-                  <span className="truncate">12. Offers &amp; Marquee</span>
+                  <span className="truncate">11. Offers &amp; Marquee</span>
                 </div>
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
                   activeTab === 'offers_manager' ? 'bg-slate-950 text-amber-300' : 'bg-slate-800 text-slate-300'
                 }`}>
                   Live
-                </span>
-              </button>
-            </div>
-
-            {/* Section 4: Finance & Audit */}
-            <div className="space-y-1">
-              <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Finance &amp; Audit
-              </div>
-
-              {/* 9. Activity Logs */}
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab('activity_logs');
-                  setIsMobileNavOpen(false);
-                }}
-                className={`w-full px-3 py-2.5 rounded-xl font-bold flex items-center justify-between transition-all cursor-pointer text-left ${
-                  activeTab === 'activity_logs'
-                    ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800/80'
-                }`}
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <History className="w-4 h-4 shrink-0" />
-                  <span className="truncate">Activity &amp; Payments</span>
-                </div>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
-                  activeTab === 'activity_logs' ? 'bg-slate-950 text-cyan-300' : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
-                }`}>
-                  {activityLogs.length}
                 </span>
               </button>
             </div>

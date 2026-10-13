@@ -207,7 +207,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       setTimeout(() => {
         if (
           userProfile.role === 'admin' ||
-          userProfile.email.toLowerCase() === 'chandinikurumoju424@gmail.com'
+          userProfile.email.toLowerCase().includes('kkumariinstitut')
         ) {
           if (onNavigateAdmin) onNavigateAdmin();
           else onNavigateHome();
@@ -607,30 +607,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   >
                     Create New Account
                   </button>
-                </div>
-
-                {/* Administrator Quick-Access Info Card */}
-                <div className="mt-4 p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200/90 text-left">
-                  <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <span className="text-[11px] font-black uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
-                      <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />
-                      Administrator Access
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLoginEmail('chandinikurumoju424@gmail.com');
-                        setLoginPassword('ram123');
-                        setLoginError(null);
-                      }}
-                      className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-[11px] rounded-lg transition-colors cursor-pointer shadow-2xs"
-                    >
-                      Fill Admin Login
-                    </button>
-                  </div>
-                  <p className="text-[11px] text-amber-800 leading-snug">
-                    <span className="font-semibold">Email:</span> chandinikurumoju424@gmail.com &nbsp;|&nbsp; <span className="font-semibold">Password:</span> ram123
-                  </p>
                 </div>
               </form>
             )}

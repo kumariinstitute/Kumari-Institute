@@ -25,7 +25,6 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { ReceivedFeeRecord, formatINR } from '../services/feePaymentService';
-import { adminCreateAndApprovePayout } from '../services/payoutService';
 
 interface AdminReceivedFeeTabProps {
   receivedFees: ReceivedFeeRecord[];
@@ -49,20 +48,6 @@ export const AdminReceivedFeeTab: React.FC<AdminReceivedFeeTabProps> = ({
   >('all');
   const [selectedFeeModal, setSelectedFeeModal] = useState<ReceivedFeeRecord | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-
-  // Approve Withdrawal Modal State
-  const [payoutFeeTarget, setPayoutFeeTarget] = useState<ReceivedFeeRecord | null>(null);
-  const [payoutAmount, setPayoutAmount] = useState<string>('');
-  const [payoutMethod, setPayoutMethod] = useState<'upi' | 'bank_transfer'>('upi');
-  const [payoutUtr, setPayoutUtr] = useState<string>('');
-  const [payoutNotes, setPayoutNotes] = useState<string>('');
-  const [payoutUpiId, setPayoutUpiId] = useState<string>('');
-  const [payoutBankName, setPayoutBankName] = useState<string>('State Bank of India (Rayagada)');
-  const [payoutAccountNo, setPayoutAccountNo] = useState<string>('');
-  const [payoutIfsc, setPayoutIfsc] = useState<string>('SBIN0000167');
-  const [isSubmittingPayout, setIsSubmittingPayout] = useState(false);
-  const [payoutSuccessMessage, setPayoutSuccessMessage] = useState<string | null>(null);
-  const [payoutErrorMessage, setPayoutErrorMessage] = useState<string | null>(null);
 
   // Quick Date Preset Handler
   const handleDatePresetChange = (preset: 'all' | 'today' | 'this_week' | 'this_month' | 'custom') => {
@@ -218,79 +203,7 @@ export const AdminReceivedFeeTab: React.FC<AdminReceivedFeeTabProps> = ({
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const handleOpenApproveWithdrawal = (fee: ReceivedFeeRecord) => {
-    setPayoutFeeTarget(fee);
-    setPayoutAmount(fee.amount ? fee.amount.toString() : '3000');
-    setPayoutMethod('upi');
-    setPayoutUtr('');
-    setPayoutNotes(`Monthly tuition payout for ${fee.tutorName} (Student: ${fee.studentName})`);
-    setPayoutUpiId(`${fee.tutorName.toLowerCase().replace(/\s+/g, '')}@okaxis`);
-    setPayoutAccountNo('982400192837');
-    setPayoutSuccessMessage(null);
-    setPayoutErrorMessage(null);
-  };
 
-  const handleConfirmApprovePayout = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!payoutFeeTarget) return;
-
-    const amt = parseFloat(payoutAmount);
-    if (isNaN(amt) || amt <= 0) {
-      setPayoutErrorMessage('Please enter a valid disbursement amount.');
-      return;
-    }
-
-    if (!payoutUtr.trim()) {
-      setPayoutErrorMessage('Bank UTR / Transaction Reference number is mandatory for audit verification.');
-      return;
-    }
-
-    setIsSubmittingPayout(true);
-    setPayoutErrorMessage(null);
-
-    try {
-      const tutorIdentifier =
-        payoutFeeTarget.tutorId ||
-        payoutFeeTarget.tutorName.toLowerCase().replace(/[^a-z0-9]/g, '_');
-
-      await adminCreateAndApprovePayout({
-        tutorId: tutorIdentifier,
-        tutorName: payoutFeeTarget.tutorName,
-        tutorPhone: payoutFeeTarget.tutorPhone,
-        amount: amt,
-        paymentMethod: payoutMethod,
-        upiId: payoutMethod === 'upi' ? payoutUpiId.trim() : undefined,
-        bankDetails:
-          payoutMethod === 'bank_transfer'
-            ? {
-                bankName: payoutBankName.trim(),
-                accountNumber: payoutAccountNo.trim(),
-                ifscCode: payoutIfsc.trim(),
-                accountHolder: payoutFeeTarget.tutorName
-              }
-            : undefined,
-        utrNumber: payoutUtr.trim(),
-        transferredAmount: amt,
-        transferMethod: payoutMethod === 'upi' ? 'UPI Bank Transfer' : 'IMPS / NEFT Settlement',
-        adminNote: payoutNotes.trim() || `Disbursed for ${payoutFeeTarget.receiptNo}`
-      });
-
-      setPayoutSuccessMessage(
-        `✓ Payout of ₹${amt.toLocaleString('en-IN')} approved for ${payoutFeeTarget.tutorName}! Tutor balance updated and UTR logged in payout history.`
-      );
-
-      setTimeout(() => {
-        setPayoutFeeTarget(null);
-        setPayoutSuccessMessage(null);
-        if (onRefresh) onRefresh();
-      }, 1500);
-    } catch (err: any) {
-      console.error('Error approving withdrawal:', err);
-      setPayoutErrorMessage(err?.message || 'Failed to approve withdrawal. Please retry.');
-    } finally {
-      setIsSubmittingPayout(false);
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -748,23 +661,13 @@ export const AdminReceivedFeeTab: React.FC<AdminReceivedFeeTabProps> = ({
                       <span className="text-[10px] text-slate-500">28-day cycle</span>
                     </td>
 
-                    {/* Actions: View Receipt Modal & Approve Withdrawal */}
+                    {/* Actions: View Receipt Modal */}
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           type="button"
-                          onClick={() => handleOpenApproveWithdrawal(fee)}
-                          className="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-sm active:scale-95"
-                          title="Approve tutor payout with UTR and payment notes"
-                        >
-                          <Wallet className="w-3.5 h-3.5" />
-                          <span>Approve Withdrawal</span>
-                        </button>
-
-                        <button
-                          type="button"
                           onClick={() => setSelectedFeeModal(fee)}
-                          className="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-750 text-slate-200 border border-slate-700 text-[11px] font-bold transition-all cursor-pointer inline-flex items-center gap-1 shadow-xs"
+                          className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-750 text-slate-200 border border-slate-700 text-[11px] font-bold transition-all cursor-pointer inline-flex items-center gap-1 shadow-xs"
                           title="View Fee Voucher"
                         >
                           <Receipt className="w-3.5 h-3.5 text-emerald-400" />
@@ -780,10 +683,7 @@ export const AdminReceivedFeeTab: React.FC<AdminReceivedFeeTabProps> = ({
         </div>
       )}
 
-      {/* =========================================================================
-          APPROVE WITHDRAWAL & RECORD PAYOUT MODAL (With UTR and Notes)
-         ========================================================================= */}
-      {payoutFeeTarget && (
+      {false && (
         <div
           role="dialog"
           aria-modal="true"
@@ -1145,19 +1045,7 @@ export const AdminReceivedFeeTab: React.FC<AdminReceivedFeeTabProps> = ({
               )}
 
               {/* Bottom Actions */}
-              <div className="flex items-center justify-between pt-2 gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const fee = selectedFeeModal;
-                    setSelectedFeeModal(null);
-                    handleOpenApproveWithdrawal(fee);
-                  }}
-                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs cursor-pointer shadow-xs flex items-center gap-1.5"
-                >
-                  <Wallet className="w-3.5 h-3.5" />
-                  <span>Approve Withdrawal for {selectedFeeModal.tutorName}</span>
-                </button>
+              <div className="flex items-center justify-end pt-2 gap-2 flex-wrap">
 
                 <div className="flex items-center gap-2">
                   <button

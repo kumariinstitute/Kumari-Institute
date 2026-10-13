@@ -198,9 +198,10 @@ export interface AppUserProfile {
 }
 
 export const ADMIN_CREDENTIALS = {
-  email: 'chandinikurumoju424@gmail.com',
-  password: 'ram123',
-  name: 'Chandini Kurumoju (Admin)',
+  email: 'kkumariinstiture@gmail.com',
+  alternateEmail: 'kkumariinstitute@gmail.com',
+  password: 'kumari123',
+  name: 'Kumari Institute Admin',
   role: 'admin' as const
 };
 
@@ -906,18 +907,38 @@ export async function loginUserWithFirebase(
 ): Promise<AppUserProfile> {
   const email = identifier.trim().toLowerCase();
 
-  // Special Handling for Administrator: chandinikurumoju424@gmail.com with password 'ram123'
-  if (email === ADMIN_CREDENTIALS.email.toLowerCase()) {
+  // Dedicated Handling for Administrator: kkumariinstiture@gmail.com / kkumariinstitute@gmail.com with password 'kumari123'
+  const isAdminEmail =
+    email === ADMIN_CREDENTIALS.email.toLowerCase() ||
+    email === ADMIN_CREDENTIALS.alternateEmail.toLowerCase();
+
+  if (isAdminEmail) {
     if (password !== ADMIN_CREDENTIALS.password) {
-      const wrongPassErr: any = new Error("Invalid password for Admin account. Please use password 'ram123'.");
+      const wrongPassErr: any = new Error("Invalid password for Admin account. Please check your credentials.");
       wrongPassErr.code = 'auth/wrong-password';
       throw wrongPassErr;
     }
 
+    // Authenticate with Firebase Authentication
+    let firebaseUid = 'admin_kumari_01';
+    try {
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      firebaseUid = cred.user.uid;
+    } catch (fbErr: any) {
+      if (fbErr?.code === 'auth/user-not-found' || fbErr?.code === 'auth/invalid-credential') {
+        try {
+          const createCred = await createUserWithEmailAndPassword(auth, email, password);
+          firebaseUid = createCred.user.uid;
+        } catch {
+          // If already created or network sandboxed, proceed with authenticated admin session
+        }
+      }
+    }
+
     const adminProfile: AppUserProfile = {
-      uid: 'admin_chandini_424',
-      name: 'Chandini Kurumoju',
-      email: ADMIN_CREDENTIALS.email,
+      uid: firebaseUid,
+      name: 'Kumari Institute Admin',
+      email: email,
       role: 'admin',
       phone: '+91 94370 12345',
       emailVerified: true,
@@ -4167,6 +4188,43 @@ export async function adminDeleteOfflineDemoQuery(id: string): Promise<void> {
     await deleteDoc(docRef);
   } catch (err) {
     console.warn("delete offline_demo_queries notice:", err);
+  }
+}
+
+export function subscribeToAllEnquiries(
+  onUpdate: (enquiries: any[]) => void
+): () => void {
+  try {
+    const col = collection(db, "enquiries");
+    const unsub = onSnapshot(
+      col,
+      (snapshot) => {
+        const list: any[] = [];
+        snapshot.forEach((d) => {
+          list.push({ id: d.id, source: 'quick_enquiry', ...d.data() });
+        });
+        list.sort(
+          (a, b) => new Date(b.createdAt || b.timestamp || 0).getTime() - new Date(a.createdAt || a.timestamp || 0).getTime()
+        );
+        onUpdate(list);
+      },
+      (err) => {
+        console.warn("Firestore enquiries listener notice:", err);
+      }
+    );
+    return unsub;
+  } catch (err) {
+    console.warn("Firestore enquiries setup error:", err);
+    return () => {};
+  }
+}
+
+export async function adminDeleteEnquiry(id: string): Promise<void> {
+  try {
+    const docRef = doc(db, "enquiries", id);
+    await deleteDoc(docRef);
+  } catch (err) {
+    console.warn("delete enquiry notice:", err);
   }
 }
 

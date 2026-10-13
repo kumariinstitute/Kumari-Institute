@@ -67,7 +67,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const isAdmin =
     currentUser?.role === 'admin' ||
-    currentUser?.email?.toLowerCase() === 'chandinikurumoju424@gmail.com';
+    Boolean(currentUser?.email?.toLowerCase().includes('kkumariinstitut'));
 
   useEffect(() => {
     const handleScroll = () => {

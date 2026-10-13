@@ -76,7 +76,8 @@ export function calculateTutorEarnings(
     Number(tutorRates.hourlyFee) ||
     (tutorRates.monthlyFee ? Math.round(tutorRates.monthlyFee / 30) : 100);
 
-  const defaultMonthlyPerStudent = tutorHourly * 30;
+  const baseMonthlyPerStudent = tutorHourly * 30;
+  const defaultMonthlyPerStudent = Math.round(baseMonthlyPerStudent * 0.8);
 
   let totalMonthlyAccrued = 0;
   let pendingAmount = 0;
@@ -85,7 +86,8 @@ export function calculateTutorEarnings(
   const now = Date.now();
 
   assignedStudents.forEach((student) => {
-    const fee = Number(student.monthlyFee) || Number(student.assignedTutorFee) || defaultMonthlyPerStudent;
+    const rawFee = Number(student.monthlyFee) || Number(student.assignedTutorFee) || baseMonthlyPerStudent;
+    const fee = Math.round(rawFee * 0.8);
     totalMonthlyAccrued += fee;
 
     // Check how many days have elapsed since assignment

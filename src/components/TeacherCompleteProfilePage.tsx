@@ -253,9 +253,9 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
       : 'pending';
 
   const subjectsPricingStatus: 'completed' | 'in_progress' | 'pending' =
-    selectedSubjects.length > 0 && selectedClasses.length > 0 && Number(hourlyCharges) > 0
+    selectedSubjects.length > 0 && selectedClasses.length > 0
       ? 'completed'
-      : selectedSubjects.length > 0 || Number(hourlyCharges) > 0
+      : selectedSubjects.length > 0
       ? 'in_progress'
       : 'pending';
 
@@ -2036,9 +2036,9 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
                 <Briefcase className="w-4 h-4" />
               </div>
               <div>
-                <h2 className="text-base font-bold text-slate-900">Subjects, Pricing &amp; Availability</h2>
+                <h2 className="text-base font-bold text-slate-900">Subjects &amp; Teaching Availability</h2>
                 <p className="text-xs text-slate-500">
-                  Select your subjects, classes handled, hourly tuition fee, and available hours
+                  Select your subjects, classes handled, and available teaching hours
                 </p>
               </div>
             </div>
@@ -2154,36 +2154,26 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
                 </select>
               </div>
 
-              {/* Hourly Charges (₹ / hour) at student's house */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Hourly Charges (₹ / hour) <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <span className="text-slate-400 font-bold absolute left-3 top-2.5 text-xs sm:text-sm">
-                    ₹
-                  </span>
-                  <input
-                    type="number"
-                    min="100"
-                    max="5000"
-                    step="50"
-                    value={hourlyCharges}
-                    onChange={(e) => setHourlyCharges(e.target.value)}
-                    placeholder="e.g. 400"
-                    required
-                    className="w-full pl-8 pr-3 py-2 text-xs sm:text-sm rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
-                  />
-                  <span className="text-[10px] text-slate-400 absolute right-3 top-3">
-                    per hour / student house
-                  </span>
+              {/* Class Timings Schedule (Standardized by Kumari Institute) */}
+              <div className="bg-blue-50/70 border border-blue-200/80 rounded-2xl p-3.5 space-y-2">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-[#0c2340]">
+                  <Clock className="w-3.5 h-3.5 text-[#1d4ed8]" />
+                  <span>Standard Class Timings Schedule</span>
                 </div>
-                {Number(hourlyCharges) > 0 && (
-                  <p className="text-[11px] text-emerald-700 font-semibold mt-1 flex items-center gap-1">
-                    <span>= ₹{(Number(hourlyCharges) * 30).toLocaleString('en-IN')} / month</span>
-                    <span className="text-slate-500 font-normal">(calculated at 1 hour/day for 30 days = 30 hours)</span>
-                  </p>
-                )}
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="p-2 rounded-xl bg-white border border-blue-100 shadow-2xs">
+                    <span className="block text-[10px] text-slate-500 font-bold uppercase">1st - 2nd Class</span>
+                    <span className="block text-xs font-black text-[#1d4ed8]">1 hr</span>
+                  </div>
+                  <div className="p-2 rounded-xl bg-white border border-blue-100 shadow-2xs">
+                    <span className="block text-[10px] text-slate-500 font-bold uppercase">3rd - 4th Class</span>
+                    <span className="block text-xs font-black text-[#1d4ed8]">1.30 hr</span>
+                  </div>
+                  <div className="p-2 rounded-xl bg-white border border-blue-100 shadow-2xs">
+                    <span className="block text-[10px] text-slate-500 font-bold uppercase">5th Class &amp; Above</span>
+                    <span className="block text-xs font-black text-[#1d4ed8]">2 hr</span>
+                  </div>
+                </div>
               </div>
             </div>
 

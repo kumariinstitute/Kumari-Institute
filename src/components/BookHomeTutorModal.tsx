@@ -3,6 +3,8 @@ import { X, CheckCircle2, Home, Clock, Calendar, ShieldCheck, MapPin, Phone, Use
 import { Tutor } from '../data/tutorsData';
 import { submitHomeTutorBooking, subscribeToTutorBookedSlots, AppUserProfile } from '../services/firebaseAuth';
 
+import { calculateHomeTutorFee, parseClassNumber, EducationBoard } from '../data/feeStructure';
+
 interface BookHomeTutorModalProps {
   isOpen: boolean;
   tutor: Tutor | null;
@@ -22,7 +24,10 @@ export const BookHomeTutorModal: React.FC<BookHomeTutorModalProps> = ({
 }) => {
   const [studentName, setStudentName] = useState(currentUser?.childName || '');
   const [studentGrade, setStudentGrade] = useState(
-    currentUser?.childGrade || tutor?.classesHandled?.[0] || 'Class 4 (CBSE)'
+    currentUser?.childGrade || tutor?.classesHandled?.[0] || '1st Class'
+  );
+  const [board, setBoard] = useState<EducationBoard>(
+    (currentUser?.childBoard as EducationBoard) || 'CBSE'
   );
   const [parentName, setParentName] = useState(currentUser?.name || '');
   const [parentPhone, setParentPhone] = useState(currentUser?.phone || '');
@@ -46,7 +51,7 @@ export const BookHomeTutorModal: React.FC<BookHomeTutorModalProps> = ({
   useEffect(() => {
     if (tutor && isOpen) {
       setStudentName((prev) => prev || currentUser?.childName || '');
-      setStudentGrade((prev) => prev || currentUser?.childGrade || tutor.classesHandled?.[0] || 'Class 4 (CBSE)');
+      setStudentGrade((prev) => prev || currentUser?.childGrade || '1st Class');
       setParentName((prev) => prev || currentUser?.name || '');
       setParentPhone((prev) => prev || currentUser?.phone || '');
       setParentEmail((prev) => prev || currentUser?.email || '');
@@ -107,17 +112,13 @@ export const BookHomeTutorModal: React.FC<BookHomeTutorModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [bookingSuccessId, setBookingSuccessId] = useState<string | null>(null);
 
-  // Hourly rate and monthly fee calculation based on tutor assigned hourly amount:
-  // 1 hour daily tuition:
-  // For 30 days = 30 hours * hourlyRate (e.g. ₹100 * 30 = ₹3,000)
-  // For 31 days = 31 hours * hourlyRate (e.g. ₹100 * 31 = ₹3,100)
-  const tutorHourlyRate = tutor
-    ? Number(tutor.hourlyRate) ||
-      Number((tutor as any).hourlyCharges) ||
-      Number((tutor as any).hourlyFee) ||
-      (tutor.monthlyFee ? Math.round(tutor.monthlyFee / 30) : 100)
-    : 100;
-  const effectiveMonthlyFee = tutorHourlyRate * 30; // standard 30 hours monthly tuition
+  // Standardized Home Tutor Fee Calculation
+  const classNumber = parseClassNumber(studentGrade);
+  const feeCalculation = useMemo(() => {
+    return calculateHomeTutorFee(classNumber, board, selectedSubjects.length);
+  }, [classNumber, board, selectedSubjects.length]);
+
+  const effectiveMonthlyFee = feeCalculation.fee;
   const tutorPhoto = tutor?.avatar || (tutor as any)?.photoUrl || (tutor as any)?.image || '';
 
   const toggleSubject = (sub: string) => {
@@ -225,10 +226,10 @@ export const BookHomeTutorModal: React.FC<BookHomeTutorModalProps> = ({
                 <span className="font-semibold text-emerald-700">Home Tutor (At Your Home)</span>
               </div>
               <div className="flex justify-between items-baseline">
-                <span className="text-slate-500">Monthly Tuition Fee:</span>
+                <span className="text-slate-500">Standard Monthly Tuition Fee:</span>
                 <div className="text-right">
-                  <span className="font-bold text-slate-900 block">₹{effectiveMonthlyFee.toLocaleString('en-IN')}/month</span>
-                  <span className="text-[11px] text-slate-500 font-semibold">₹{tutorHourlyRate}/hour</span>
+                  <span className="font-black text-slate-900 block text-base">₹{effectiveMonthlyFee.toLocaleString('en-IN')}/month</span>
+                  <span className="text-[11px] text-blue-700 font-bold block">{feeCalculation.timing} • {board} Board</span>
                 </div>
               </div>
             </div>
@@ -276,9 +277,9 @@ export const BookHomeTutorModal: React.FC<BookHomeTutorModalProps> = ({
                 </div>
               </div>
               <div className="text-right shrink-0">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Monthly Fee</span>
-                <span className="text-base font-black text-emerald-700">₹{effectiveMonthlyFee.toLocaleString('en-IN')}/month</span>
-                <span className="text-[11px] text-slate-500 block font-semibold">₹{tutorHourlyRate}/hour</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Tuition Fee</span>
+                <span className="text-base font-black text-emerald-700">₹{effectiveMonthlyFee.toLocaleString('en-IN')}/mo</span>
+                <span className="text-[11px] text-slate-500 block font-semibold">{feeCalculation.timing}</span>
               </div>
             </div>
 
@@ -353,9 +354,38 @@ export const BookHomeTutorModal: React.FC<BookHomeTutorModalProps> = ({
                 </div>
               </div>
               <div className="text-right shrink-0">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Monthly Fee</span>
-                <span className="text-base font-black text-emerald-700">₹{effectiveMonthlyFee.toLocaleString('en-IN')}/month</span>
-                <span className="text-[11px] text-slate-500 block font-semibold">₹{tutorHourlyRate}/hour</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Monthly Fee ({board})</span>
+                <span className="text-base font-black text-emerald-700">₹{effectiveMonthlyFee.toLocaleString('en-IN')}/mo</span>
+                <span className="text-[11px] text-blue-700 block font-bold">{feeCalculation.timing}</span>
+              </div>
+            </div>
+
+            {/* Board Selection */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">Education Board *</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setBoard('CBSE')}
+                  className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                    board === 'CBSE'
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                      : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  CBSE Board
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBoard('ICSE')}
+                  className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                    board === 'ICSE'
+                      ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
+                      : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  ICSE Board
+                </button>
               </div>
             </div>
 
@@ -380,16 +410,16 @@ export const BookHomeTutorModal: React.FC<BookHomeTutorModalProps> = ({
                   onChange={(e) => setStudentGrade(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer"
                 >
-                  <option value="1st Class (Primary)">1st Class</option>
-                  <option value="2nd Class (Primary)">2nd Class</option>
-                  <option value="3rd Class (Primary)">3rd Class</option>
-                  <option value="4th Class (Primary)">4th Class</option>
-                  <option value="5th Class (Primary)">5th Class</option>
-                  <option value="6th Class (Middle)">6th Class</option>
-                  <option value="7th Class (Middle)">7th Class</option>
-                  <option value="8th Class (Middle)">8th Class</option>
-                  <option value="9th Class (Board Prep)">9th Class</option>
-                  <option value="10th Class (Board Prep)">10th Class</option>
+                  <option value="1st Class">1st Class</option>
+                  <option value="2nd Class">2nd Class</option>
+                  <option value="3rd Class">3rd Class</option>
+                  <option value="4th Class">4th Class</option>
+                  <option value="5th Class">5th Class</option>
+                  <option value="6th Class">6th Class</option>
+                  <option value="7th Class">7th Class</option>
+                  <option value="8th Class">8th Class</option>
+                  <option value="9th Class">9th Class</option>
+                  <option value="10th Class">10th Class</option>
                 </select>
               </div>
             </div>

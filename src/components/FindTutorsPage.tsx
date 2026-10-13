@@ -30,7 +30,10 @@ import {
   Radio,
   Navigation2,
   Compass,
-  AlertCircle
+  AlertCircle,
+  Lock,
+  LogIn,
+  UserPlus
 } from 'lucide-react';
 import {
   Tutor,
@@ -40,6 +43,7 @@ import {
   findClosestLocality
 } from '../data/tutorsData';
 import { BookHomeTutorModal } from './BookHomeTutorModal';
+import { TutorProfileModal } from './TutorProfileModal';
 import { getLiveUserLocation, LiveLocationData, searchNearbyTeachers, searchLocationsOnline } from '../services/tutorApi';
 import { subscribeToRealtimeTeachers, subscribeToRealtimeBookings, AppUserProfile } from '../services/firebaseAuth';
 
@@ -96,6 +100,7 @@ export const FindTutorsPage: React.FC<FindTutorsPageProps> = ({
 }) => {
   // Home tutor booking modal state
   const [bookingTutorTarget, setBookingTutorTarget] = useState<Tutor | null>(null);
+  const [viewingTutorProfile, setViewingTutorProfile] = useState<Tutor | null>(null);
 
   const handleBookHomeTutor = (tutor: Tutor) => {
     setBookingTutorTarget(tutor);
@@ -841,36 +846,34 @@ export const FindTutorsPage: React.FC<FindTutorsPageProps> = ({
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
-              {/* Location Input with Live Distance and "Use Live Location" Button */}
+              {/* Location Input with Live Distance and Live Location */}
               <div className="md:col-span-5 relative" ref={searchDropdownRef}>
                 <div className="flex items-center justify-between mb-1 pl-1">
                   <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                    Enter Location
+                    Enter Location / Address
                   </label>
+                  {currentLocation.name && (
+                    <span className="text-[10px] text-blue-700 font-bold truncate max-w-[200px]">
+                      📍 {currentLocation.name.replace(/^📍\s*/, '')}
+                    </span>
+                  )}
                 </div>
 
-                {/* Input Container */}
+                {/* Input Container - Clean address input without popups */}
                 <div className="relative flex items-center">
                   {/* Left Location Pin Indicator */}
                   <div className="absolute left-3 flex items-center justify-center pointer-events-none z-10">
                     <MapPin className="w-4 h-4 text-[#1d4ed8]" />
                   </div>
 
-                  {/* Text Input */}
+                  {/* Text Input - Direct address entry, filters tutors accurately */}
                   <input
                     type="text"
                     value={locationSearchInput}
                     onChange={(e) => {
                       setLocationSearchInput(e.target.value);
-                      setIsDropdownOpen(true);
                     }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && locationSearchInput.trim()) {
-                        handleSelectCustomLocation(locationSearchInput.trim());
-                      }
-                    }}
-                    onFocus={() => setIsDropdownOpen(true)}
-                    placeholder="Search by area, city, or landmark..."
+                    placeholder="Enter your address, locality, or landmark..."
                     className="w-full pl-9 pr-9 py-2.5 text-xs sm:text-sm font-bold text-slate-900 bg-slate-50/90 hover:bg-slate-100/90 focus:bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-[#1d4ed8] transition-all placeholder:text-slate-400 placeholder:font-normal"
                   />
 
@@ -881,7 +884,6 @@ export const FindTutorsPage: React.FC<FindTutorsPageProps> = ({
                         type="button"
                         onClick={() => {
                           setLocationSearchInput('');
-                          setIsDropdownOpen(true);
                         }}
                         className="w-5 h-5 rounded-full bg-slate-200 text-slate-600 hover:bg-slate-300 flex items-center justify-center text-xs font-bold cursor-pointer transition-colors"
                         title="Clear input"
@@ -891,163 +893,6 @@ export const FindTutorsPage: React.FC<FindTutorsPageProps> = ({
                     </div>
                   )}
                 </div>
-
-                {/* Location Suggestions Dropdown Popover */}
-                {isDropdownOpen && (
-                  <div className="absolute top-full left-0 right-0 sm:min-w-[460px] mt-2 z-50 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden divide-y divide-slate-100 animate-in fade-in slide-in-from-top-2 duration-150 text-left">
-                    {/* Option 1: Live Current Location detection */}
-                    <div
-                      onClick={handleUseCurrentLocation}
-                      className="p-3 bg-blue-50/50 hover:bg-blue-50 cursor-pointer flex items-center justify-between transition-colors border-b border-blue-100"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-8 h-8 rounded-xl bg-[#1d4ed8] text-white flex items-center justify-center shrink-0 shadow-xs">
-                          {isLocatingGps ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <LocateFixed className="w-4 h-4" />
-                          )}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="text-xs font-bold text-slate-900">
-                            Use Live Location
-                          </div>
-                          <div className="text-[11px] text-slate-500 truncate">
-                            Detect coordinates to find nearest verified tutors
-                          </div>
-                        </div>
-                      </div>
-                      <span className="text-xs font-bold text-[#1d4ed8] bg-white border border-blue-200 px-2.5 py-1 rounded-lg shrink-0 ml-2 shadow-2xs">
-                        {isLocatingGps ? 'Acquiring GPS Lock...' : 'Use Live Location'}
-                      </span>
-                    </div>
-
-                    {/* Online / Geocoded matched places */}
-                    {onlineSearchResults.length > 0 && (
-                      <div className="p-3 bg-blue-50/40 border-b border-slate-100">
-                        <div className="text-[10px] font-extrabold text-[#1d4ed8] uppercase tracking-wider mb-2 flex items-center justify-between">
-                          <span>Matched Locations</span>
-                          {isSearchingOnline && <span className="text-slate-400 font-normal">Searching...</span>}
-                        </div>
-                        <div className="space-y-1.5">
-                          {onlineSearchResults.map((place, idx) => (
-                            <div
-                              key={idx}
-                              onClick={() => handleSelectCustomLocation(place.displayName, place.latitude, place.longitude, place.fullAddress)}
-                              className="p-2 rounded-xl bg-white hover:bg-blue-50 cursor-pointer border border-slate-200/80 flex items-center justify-between gap-2 transition-colors"
-                            >
-                              <div className="flex items-center gap-2 min-w-0">
-                                <MapPin className="w-4 h-4 text-[#1d4ed8] shrink-0" />
-                                <div className="min-w-0 text-left">
-                                   <div className="text-xs font-bold text-slate-800 truncate">{place.displayName}</div>
-                                   {place.fullAddress && (
-                                     <div className="text-[10px] text-slate-400 truncate">{place.fullAddress}</div>
-                                   )}
-                                </div>
-                              </div>
-                              <span className="text-[10px] font-bold text-[#1d4ed8] bg-blue-50 px-2 py-0.5 rounded-md shrink-0 border border-blue-100">
-                                Select
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Option 3: Localities with Real Dynamic Distance */}
-                    <div className="max-h-60 overflow-y-auto divide-y divide-slate-100">
-                      <div className="px-3 py-1.5 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider bg-slate-50 sticky top-0 z-10 flex items-center justify-between">
-                        <span>Popular Localities &amp; Areas ({filteredLocalities.length})</span>
-                        <span className="text-slate-400 font-normal">Distance from live point</span>
-                      </div>
-
-                      {filteredLocalities.map((loc) => {
-                        const dist = calculateDistanceKm(
-                          currentLocation.lat,
-                          currentLocation.lng,
-                          loc.latitude,
-                          loc.longitude
-                        );
-                        const isSelected =
-                          !currentLocation.isGps && currentLocation.name.includes(loc.name);
-
-                        return (
-                          <div
-                            key={loc.id}
-                            onClick={() => handleSelectLocality(loc)}
-                            className={`p-3 flex items-center justify-between gap-3 hover:bg-blue-50/60 cursor-pointer transition-colors ${
-                              isSelected ? 'bg-blue-50/80' : ''
-                            }`}
-                          >
-                            <div className="flex items-start gap-2.5 min-w-0">
-                              <div className="w-8 h-8 rounded-lg bg-blue-50 text-[#1d4ed8] flex items-center justify-center shrink-0 mt-0.5 border border-blue-100">
-                                <Building2 className="w-4 h-4" />
-                              </div>
-                              <div className="min-w-0 text-left">
-                                <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5 truncate">
-                                  <span>{loc.name}</span>
-                                  {isSelected && (
-                                    <span className="text-blue-600 font-extrabold">✓</span>
-                                  )}
-                                </div>
-                                <div className="text-[11px] text-slate-500 truncate">
-                                  {loc.subtitle}
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="flex flex-col items-end shrink-0 pl-2">
-                              <span className="text-xs font-bold text-[#1d4ed8] bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
-                                {dist} km
-                              </span>
-                              <span className="text-[10px] text-emerald-700 font-semibold mt-0.5">
-                                {loc.tutorCount} Tutors
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
-
-                      {filteredLocalities.length === 0 && onlineSearchResults.length === 0 && (
-                        <div className="p-4 text-center text-xs text-slate-500 space-y-2">
-                          <p>Search for "{locationSearchInput}"</p>
-                          <button
-                            type="button"
-                            onClick={() => handleSelectCustomLocation(locationSearchInput.trim())}
-                            className="px-3 py-1.5 bg-[#1d4ed8] text-white rounded-xl text-xs font-bold hover:bg-[#0c2340] cursor-pointer"
-                          >
-                            Set Location to "{locationSearchInput.trim()}"
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Dropdown Footer */}
-                    <div className="p-2.5 bg-slate-50 flex items-center justify-between text-xs gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-[11px] text-slate-500 truncate">
-                          📍 <strong className="text-slate-800">{currentLocation.name}</strong>
-                        </span>
-                        {currentLocation.isGps && (
-                          <button
-                            type="button"
-                            onClick={handleResetToDefaultHub}
-                            className="text-[10px] text-blue-700 hover:text-blue-900 underline font-semibold shrink-0"
-                          >
-                            Reset to Default Hub
-                          </button>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setIsDropdownOpen(false)}
-                        className="px-3 py-1 rounded-lg bg-[#0c2340] text-white font-bold hover:bg-[#1d4ed8] transition-colors cursor-pointer shrink-0"
-                      >
-                        Done
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* 2. Select Subject */}
@@ -1198,9 +1043,55 @@ export const FindTutorsPage: React.FC<FindTutorsPageProps> = ({
           </div>
         </div>
 
-        {/* 2-Column Grid on Desktop, Clean 1-Column Responsive Cards on Mobile */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
-          {filteredTutors.map((tutor) => {
+        {/* Parent Authentication Gate: Require Login or Sign Up to view tutors */}
+        {!currentUser ? (
+          <div className="my-8 max-w-xl mx-auto bg-white rounded-3xl border border-blue-200/90 p-8 sm:p-10 shadow-xl text-center space-y-6">
+            <div className="w-16 h-16 rounded-2xl bg-blue-50 text-[#1d4ed8] border border-blue-200 flex items-center justify-center mx-auto shadow-xs">
+              <Lock className="w-8 h-8 text-[#1d4ed8]" />
+            </div>
+
+            <div className="space-y-2">
+              <span className="px-3.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-900 border border-amber-200 inline-block">
+                Parent Login Required
+              </span>
+              <h3 className="text-2xl font-black text-[#0c2340]">
+                Sign In to View Verified Tutors Near You
+              </h3>
+              <p className="text-sm text-slate-600 leading-relaxed max-w-md mx-auto">
+                Please log in or create a parent account to explore verified home tutors in Rayagada, inspect credentials, and schedule doorstep tuitions.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 max-w-md mx-auto">
+              <button
+                type="button"
+                onClick={() => onNavigateAuth?.('login', 'parent')}
+                className="w-full py-3.5 px-4 rounded-xl bg-[#0c2340] hover:bg-slate-900 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
+              >
+                <LogIn className="w-4 h-4 text-amber-400" />
+                <span>Parent Log In</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onNavigateAuth?.('create-parent', 'parent')}
+                className="w-full py-3.5 px-4 rounded-xl bg-[#1d4ed8] hover:bg-blue-800 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>Create New Account</span>
+              </button>
+            </div>
+
+            <div className="pt-2 text-xs text-slate-400 flex items-center justify-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-600" />
+              <span>100% Verified Doorstep Home Tutors</span>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* 2-Column Grid on Desktop, Clean 1-Column Responsive Cards on Mobile */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
+              {filteredTutors.map((tutor) => {
             const isFav = favoriteIds.has(tutor.id);
             const hourlyPrice =
               Number(tutor.hourlyRate) ||
@@ -1337,64 +1228,43 @@ export const FindTutorsPage: React.FC<FindTutorsPageProps> = ({
                     </div>
                   )}
 
-                  {/* Dedicated Amount / Tuition Fee Row on the Next Line */}
-                  {hasFee ? (
-                    <div className="mt-4 sm:mt-5 p-3.5 sm:p-4 bg-gradient-to-r from-slate-50 via-blue-50/40 to-slate-50 rounded-xl sm:rounded-2xl border border-slate-200/80 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-xl bg-blue-100 text-[#1d4ed8] flex items-center justify-center font-black text-sm shrink-0">
-                          ₹
-                        </div>
-                        <div>
-                          <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-                            Tuition Fee (1 hr daily)
-                          </div>
-                          <div className="text-xs text-slate-500 font-medium">
-                            {effectiveMonthly ? `₹${effectiveMonthly.toLocaleString('en-IN')}/month standard tuition` : 'Home & Online Sessions'}
-                          </div>
-                        </div>
+                  {/* Standardized Fee & Timing Display */}
+                  <div className="mt-4 p-3.5 bg-gradient-to-r from-blue-50/80 via-indigo-50/50 to-purple-50/80 rounded-2xl border border-blue-200/80 space-y-2.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-1.5 font-bold text-[#0c2340]">
+                        <Award className="w-3.5 h-3.5 text-[#1d4ed8]" />
+                        <span>Standard Tuition Fees</span>
                       </div>
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-700 bg-white px-2 py-0.5 rounded-md border border-blue-200 shadow-2xs">
+                        Official Rates
+                      </span>
+                    </div>
 
-                      <div className="text-right shrink-0">
-                        {hourlyPrice > 0 ? (
-                          <div>
-                            <div className="text-xl sm:text-2xl font-black text-[#0c2340]">
-                              ₹{hourlyPrice}
-                              <span className="text-xs font-semibold text-slate-500">/hr</span>
-                            </div>
-                            <div className="text-[10px] font-bold text-emerald-700">
-                              ₹{(hourlyPrice * 30).toLocaleString('en-IN')}/mo
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="text-lg font-black text-[#0c2340]">
-                            ₹{effectiveMonthly ? effectiveMonthly.toLocaleString('en-IN') : ''}
-                            <span className="text-xs font-semibold text-slate-500">/mo</span>
-                          </div>
-                        )}
+                    <div className="grid grid-cols-2 gap-2 text-left">
+                      <div className="p-2.5 rounded-xl bg-white/90 border border-blue-100 shadow-2xs">
+                        <span className="block text-[10px] font-bold text-blue-800 uppercase">CBSE Board</span>
+                        <span className="block text-xs font-black text-slate-900 mt-0.5">₹1,200 to ₹3,500</span>
+                        <span className="block text-[9px] text-slate-500 font-medium">6th-10th: ₹3,000-3,500/sub</span>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-white/90 border border-purple-100 shadow-2xs">
+                        <span className="block text-[10px] font-bold text-purple-800 uppercase">ICSE Board</span>
+                        <span className="block text-xs font-black text-slate-900 mt-0.5">₹1,500 to ₹4,000</span>
+                        <span className="block text-[9px] text-slate-500 font-medium">6th-10th: ₹3,000-4,000/sub</span>
                       </div>
                     </div>
-                  ) : (
-                    <div className="mt-4 sm:mt-5 p-3.5 sm:p-4 bg-amber-50/60 rounded-xl sm:rounded-2xl border border-amber-200/80 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-black text-sm shrink-0">
-                          ₹
-                        </div>
-                        <div>
-                          <div className="text-[10px] font-extrabold uppercase tracking-wider text-amber-800">
-                            Tuition Fee
-                          </div>
-                          <div className="text-xs text-amber-700 font-medium">
-                            Fee not configured yet • Set up your profile
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <span className="px-2.5 py-1 rounded-lg bg-white border border-amber-200 text-amber-800 text-xs font-bold shadow-2xs">
-                          Pricing Pending
-                        </span>
-                      </div>
+
+                    {/* Timings breakdown */}
+                    <div className="pt-1.5 border-t border-blue-100/80 flex items-center justify-between text-[10px] font-bold text-slate-600">
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-[#1d4ed8]" />
+                        <span>1-2 Class: 1 hr</span>
+                      </span>
+                      <span>•</span>
+                      <span>3-4 Class: 1.30 hr</span>
+                      <span>•</span>
+                      <span>5 Class: 2 hr</span>
                     </div>
-                  )}
+                  </div>
 
                   {/* Divider */}
                   <div className="my-3.5 border-t border-slate-100" />
@@ -1442,8 +1312,17 @@ export const FindTutorsPage: React.FC<FindTutorsPageProps> = ({
                   </div>
                 </div>
 
-                {/* Bottom Action Button: Book Home Tutor / Booked */}
-                <div className="mt-5 pt-3 border-t border-slate-100">
+                {/* Bottom Action Buttons: View Profile + Book Home Tutor */}
+                <div className="mt-5 pt-3 border-t border-slate-100 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setViewingTutorProfile(tutor)}
+                    className="w-full py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs sm:text-sm transition-all text-center cursor-pointer flex items-center justify-center gap-1.5 border border-slate-200 shadow-2xs"
+                  >
+                    <User className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                    <span>View Profile</span>
+                  </button>
+
                   {parentBookedTutorIds.has(tutor.id) ? (
                     <div
                       className="w-full py-2.5 px-3 rounded-xl bg-emerald-50 text-emerald-800 font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 border border-emerald-300 select-none shadow-2xs"
@@ -1459,7 +1338,7 @@ export const FindTutorsPage: React.FC<FindTutorsPageProps> = ({
                       className="w-full py-2.5 px-3 rounded-xl bg-[#1d4ed8] hover:bg-blue-800 text-white font-bold text-xs sm:text-sm shadow-xs hover:shadow-md transition-all duration-200 active:scale-[0.98] text-center cursor-pointer flex items-center justify-center gap-1.5"
                     >
                       <Home className="w-3.5 h-3.5 shrink-0" />
-                      <span>Book Home Tutor</span>
+                      <span>Book Tutor</span>
                     </button>
                   )}
                 </div>
@@ -1537,6 +1416,8 @@ export const FindTutorsPage: React.FC<FindTutorsPageProps> = ({
               </button>
             </div>
           </div>
+        )}
+        </>
         )}
 
         {/* =======================================================================
@@ -1639,6 +1520,17 @@ export const FindTutorsPage: React.FC<FindTutorsPageProps> = ({
         onNavigateAuth={onNavigateAuth}
         onBookingSuccess={() => {
           // Real-time listener will mark as booked once booking is officially completed by admin
+        }}
+      />
+
+      {/* Tutor Profile Modal with Full Details, Timings & Rates (No Contact Info) */}
+      <TutorProfileModal
+        isOpen={Boolean(viewingTutorProfile)}
+        tutor={viewingTutorProfile}
+        onClose={() => setViewingTutorProfile(null)}
+        onBookTutor={(t) => {
+          setViewingTutorProfile(null);
+          handleBookHomeTutor(t);
         }}
       />
     </div>

@@ -198,7 +198,7 @@ export default function App() {
               // Strictly verify email status before setting the session in App.tsx
               if (user && user.emailVerified === true) {
                 setCurrentUser(user);
-                if (user.role === 'admin' || user.email?.toLowerCase() === 'chandinikurumoju424@gmail.com') {
+                if (user.role === 'admin' || user.email?.toLowerCase().includes('kkumariinstitut')) {
                   setActiveTab('admin');
                 }
               } else {
