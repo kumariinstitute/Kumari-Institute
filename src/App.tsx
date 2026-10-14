@@ -24,6 +24,7 @@ import { ProgramDetailModal } from './components/ProgramDetailModal';
 import { ResultsModal } from './components/ResultsModal';
 import { AuthPage, AuthViewMode } from './components/AuthPage';
 import { ProfilePage } from './components/ProfilePage';
+import { TeacherCompleteProfilePage } from './components/TeacherCompleteProfilePage';
 import { AdminPanel } from './components/AdminPanel';
 import { BottomNav } from './components/BottomNav';
 import { Program } from './types';
@@ -43,6 +44,7 @@ export default function App() {
   >('home');
   const [authInitialMode, setAuthInitialMode] = useState<AuthViewMode>('login');
   const [authInitialRole, setAuthInitialRole] = useState<'parent' | 'teacher'>('parent');
+  const [isCompletingTeacherProfile, setIsCompletingTeacherProfile] = useState(false);
   // Load saved session immediately, strictly verifying email status before setting session in App.tsx
   const [currentUser, setCurrentUser] = useState<AppUserProfile | null>(() => {
     const saved = loadSavedUserSession();
@@ -267,24 +269,40 @@ export default function App() {
       ) : activeTab === 'profile' ? (
         <main className="flex-1">
           {currentUser && currentUser.emailVerified === true ? (
-            <ProfilePage
-              user={currentUser}
-              onNavigateHome={handleNavigateHome}
-              onNavigateCourses={handleScrollToCourses}
-              onNavigateTutors={handleNavigateTutors}
-              onOpenEnquiry={handleOpenEnquiry}
-              onOpenDemoBooking={handleOpenDemo}
-              onLogout={async () => {
-                try {
-                  await logoutUserFromFirebase();
-                } catch (err) {
-                  console.warn('Firebase logout notice:', err);
-                }
-                setCurrentUser(null);
-                setActiveTab('home');
-              }}
-              onProfileUpdated={(updatedUser) => setCurrentUser(updatedUser)}
-            />
+            isCompletingTeacherProfile ? (
+              <TeacherCompleteProfilePage
+                currentUser={currentUser}
+                onBackToDashboard={() => setIsCompletingTeacherProfile(false)}
+                onNavigateHome={() => {
+                  setIsCompletingTeacherProfile(false);
+                  handleNavigateHome();
+                }}
+                onProfileSaved={(updated) => {
+                  if (updated) setCurrentUser(updated);
+                  setIsCompletingTeacherProfile(false);
+                }}
+              />
+            ) : (
+              <ProfilePage
+                user={currentUser}
+                onNavigateHome={handleNavigateHome}
+                onNavigateCourses={handleScrollToCourses}
+                onNavigateTutors={handleNavigateTutors}
+                onCompleteTeacherProfile={() => setIsCompletingTeacherProfile(true)}
+                onOpenEnquiry={handleOpenEnquiry}
+                onOpenDemoBooking={handleOpenDemo}
+                onLogout={async () => {
+                  try {
+                    await logoutUserFromFirebase();
+                  } catch (err) {
+                    console.warn('Firebase logout notice:', err);
+                  }
+                  setCurrentUser(null);
+                  setActiveTab('home');
+                }}
+                onProfileUpdated={(updatedUser) => setCurrentUser(updatedUser)}
+              />
+            )
           ) : (
             <div className="py-24 max-w-md mx-auto px-4 text-center space-y-4">
               <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 mx-auto flex items-center justify-center border border-amber-200">

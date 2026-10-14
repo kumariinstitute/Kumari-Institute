@@ -43,7 +43,7 @@ import {
   findClosestLocality
 } from '../data/tutorsData';
 import { BookHomeTutorModal } from './BookHomeTutorModal';
-import { TutorProfileModal } from './TutorProfileModal';
+import { TutorProfilePage } from './TutorProfilePage';
 import { getLiveUserLocation, LiveLocationData, searchNearbyTeachers, searchLocationsOnline } from '../services/tutorApi';
 import { subscribeToRealtimeTeachers, subscribeToRealtimeBookings, AppUserProfile } from '../services/firebaseAuth';
 
@@ -674,6 +674,33 @@ export const FindTutorsPage: React.FC<FindTutorsPageProps> = ({
     }
     return 'bg-slate-100 text-slate-700 border-slate-200';
   };
+
+  // Dedicated Mobile-First Tutor Profile Page (replaces popup modal)
+  if (viewingTutorProfile) {
+    return (
+      <div className="min-h-screen bg-[#f8fafc]">
+        <TutorProfilePage
+          tutor={viewingTutorProfile}
+          currentUser={currentUser}
+          onBack={() => setViewingTutorProfile(null)}
+          onBookTutor={(t) => {
+            handleBookHomeTutor(t);
+          }}
+          onNavigateAuth={onNavigateAuth}
+          onOpenEnquiry={onOpenEnquiry}
+        />
+        {/* Direct Booking Modal from Profile Page */}
+        <BookHomeTutorModal
+          isOpen={Boolean(bookingTutorTarget)}
+          tutor={bookingTutorTarget}
+          currentUser={currentUser}
+          onClose={() => setBookingTutorTarget(null)}
+          onNavigateAuth={onNavigateAuth}
+          onBookingSuccess={() => {}}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col antialiased selection:bg-blue-100 selection:text-blue-900">
@@ -1520,17 +1547,6 @@ export const FindTutorsPage: React.FC<FindTutorsPageProps> = ({
         onNavigateAuth={onNavigateAuth}
         onBookingSuccess={() => {
           // Real-time listener will mark as booked once booking is officially completed by admin
-        }}
-      />
-
-      {/* Tutor Profile Modal with Full Details, Timings & Rates (No Contact Info) */}
-      <TutorProfileModal
-        isOpen={Boolean(viewingTutorProfile)}
-        tutor={viewingTutorProfile}
-        onClose={() => setViewingTutorProfile(null)}
-        onBookTutor={(t) => {
-          setViewingTutorProfile(null);
-          handleBookHomeTutor(t);
         }}
       />
     </div>

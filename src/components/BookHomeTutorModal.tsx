@@ -141,6 +141,7 @@ export const BookHomeTutorModal: React.FC<BookHomeTutorModalProps> = ({
         parentEmail: parentEmail.trim(),
         studentName: studentName.trim(),
         studentGrade: studentGrade.trim(),
+        board: board,
         subjects: selectedSubjects,
         address: address.trim(),
         locality: tutor.locationArea || 'Rayagada',
@@ -421,6 +422,31 @@ export const BookHomeTutorModal: React.FC<BookHomeTutorModalProps> = ({
                   <option value="9th Class">9th Class</option>
                   <option value="10th Class">10th Class</option>
                 </select>
+              </div>
+            </div>
+
+            {/* Live Calculated Fee Display (Board & Class specific) */}
+            <div className="p-3.5 rounded-2xl bg-gradient-to-r from-blue-50/90 to-indigo-50/90 border border-blue-200/90 flex items-center justify-between gap-3 shadow-2xs">
+              <div className="space-y-0.5">
+                <span className="text-[10px] font-black uppercase tracking-wider text-blue-900 block">
+                  Calculated Monthly Tuition Fee ({board} Board • {studentGrade})
+                </span>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-xl font-black text-slate-900">
+                    ₹{effectiveMonthlyFee.toLocaleString('en-IN')}
+                  </span>
+                  <span className="text-xs font-semibold text-slate-500">
+                    {feeCalculation.isPerSubject ? '/ month total' : '/ month'}
+                  </span>
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <span className="inline-block text-xs font-bold text-blue-700 bg-white px-2.5 py-1 rounded-lg border border-blue-200 shadow-2xs">
+                  {feeCalculation.timing}
+                </span>
+                <span className="text-[10px] text-slate-500 font-medium block mt-0.5">
+                  Doorstep Session
+                </span>
               </div>
             </div>
 

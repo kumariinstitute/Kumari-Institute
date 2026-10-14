@@ -2140,7 +2140,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 Coaching &amp; Media
               </div>
 
-              {/* 8. Offline Demo Queries */}
+              {/* 8. Enquiries */}
               <button
                 type="button"
                 onClick={() => {
@@ -2154,8 +2154,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <BookOpen className="w-4 h-4 shrink-0" />
-                  <span className="truncate">8. Offline Demo Queries</span>
+                  <MessageSquare className="w-4 h-4 shrink-0 text-purple-300" />
+                  <span className="truncate">8. Enquiries</span>
                 </div>
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
                   activeTab === 'offline_demo_queries' || activeTab === 'offline_queries' ? 'bg-purple-950 text-purple-200' : 'bg-slate-800 text-slate-300'
@@ -2241,16 +2241,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
           {/* Sidebar Footer Actions */}
           <div className="p-4 border-t border-slate-800/80 space-y-2 shrink-0 bg-slate-950">
-            <button
-              type="button"
-              onClick={() => setIsRecordPaymentModalOpen(true)}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-amber-500/10"
-            >
-              <Plus className="w-4 h-4 shrink-0" />
-              <span>Record Audit / Payment</span>
-            </button>
-
-            <div className="grid grid-cols-2 gap-2 pt-1">
+            <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={onNavigateHome}
@@ -2314,7 +2305,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     : activeTab === 'tutors_reviews' || activeTab === 'tutor_reviews'
                     ? '7. Tutors Review Collection'
                     : activeTab === 'offline_demo_queries' || activeTab === 'offline_queries'
-                    ? '8. Offline Demo Queries Collection'
+                    ? '8. Enquiries Collection (Demo & Contact Questions)'
                     : activeTab === 'gallery_manager' || activeTab === 'gallery'
                     ? '9. Gallery Manager Collection (ImgBB & Firestore)'
                     : activeTab === 'success_stories'
@@ -2347,7 +2338,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   : activeTab === 'tutors_reviews' || activeTab === 'tutor_reviews'
                   ? 'Authentic parent ratings and feedback stored in Firestore database'
                   : activeTab === 'offline_demo_queries' || activeTab === 'offline_queries'
-                  ? 'Inquiries for offline coaching classes at Indira Nagar center'
+                  ? 'Centralized incoming enquiries from parents and students for demo classes, tuitions, and course questions'
                   : activeTab === 'gallery_manager' || activeTab === 'gallery'
                   ? 'Manage campus, student activity, and classroom imagery'
                   : activeTab === 'success_stories'
@@ -3689,28 +3680,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <div className="bg-slate-800/80 rounded-3xl p-6 border border-slate-700/80 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-xl font-bold text-white">Offline Classroom Demo Queries</h2>
+                  <h2 className="text-xl font-bold text-white">Centralized Enquiries</h2>
                   <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                    Indira Nagar Coaching Center
+                    All Incoming Enquiries
                   </span>
                 </div>
                 <p className="text-xs sm:text-sm text-slate-400 max-w-2xl">
-                  Inquiries from parents and students for physical classroom batches, Navodaya exam prep, and foundation classes held directly at the Kumari Institute campus.
+                  Centralized repository for all incoming questions, demo class requests, home tuition queries, and foundation batch inquiries across Rayagada.
                 </p>
               </div>
 
               <div className="text-right">
-                <span className="text-xs text-slate-400">Total Offline Inquiries:</span>
+                <span className="text-xs text-slate-400">Total Enquiries:</span>
                 <p className="text-2xl font-black text-amber-400">{demoQueries.length}</p>
               </div>
             </div>
 
             {demoQueries.length === 0 ? (
               <div className="p-12 text-center bg-slate-800/40 rounded-3xl border border-dashed border-slate-700 space-y-3">
-                <BookOpen className="w-10 h-10 text-slate-500 mx-auto" />
-                <h3 className="text-base font-bold text-slate-200">No Offline Demo Inquiries</h3>
+                <MessageSquare className="w-10 h-10 text-slate-500 mx-auto" />
+                <h3 className="text-base font-bold text-slate-200">No Enquiries Yet</h3>
                 <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                  When visitors submit inquiries for classroom foundation batches, they will appear here.
+                  When visitors or parents submit demo requests or tuition inquiries, they will appear here.
                 </p>
               </div>
             ) : (

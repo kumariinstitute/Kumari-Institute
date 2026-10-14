@@ -423,9 +423,13 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
 
     const fromBookings = liveHomeTutorBookings
       .filter((b) => {
-        const isMatchedTutor = b.assignedTutorId === tutorUid || b.requestedTutorId === tutorUid;
-        const isActiveStatus = b.status === 'accepted' || b.status === 'assigned';
-        return isMatchedTutor && isActiveStatus;
+        const isMatchedTutor =
+          b.assignedTutorId === tutorUid ||
+          b.requestedTutorId === tutorUid ||
+          (user?.email && b.tutorEmail?.toLowerCase() === user.email.toLowerCase()) ||
+          (user?.name && b.requestedTutorName === user.name);
+        const isValidStatus = b.status === 'accepted' || b.status === 'assigned' || b.status === 'pending' || !b.status;
+        return isMatchedTutor && isValidStatus;
       })
       .map((b) => ({
         id: b.id,
@@ -433,7 +437,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
         studentName: b.studentName,
         name: b.studentName,
         grade: b.studentGrade || 'Tuition Student',
-        board: b.studentBoard || b.board || '',
+        board: b.board || b.studentBoard || '',
         school: b.studentSchool || b.school || '',
         parentName: b.parentName || 'Parent',
         parentPhone: b.parentPhone || '',
@@ -442,9 +446,10 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
         locality: b.locality || b.address || 'Rayagada',
         subjects: b.subjects || ['Home Tuition'],
         timing: b.preferredTimeSlot || '5:00 PM - 6:00 PM',
-        monthlyFee: b.assignedTutorFee || b.requestedTutorMonthlyFee || 3000,
+        monthlyFee: b.requestedTutorMonthlyFee || b.assignedTutorFee || b.monthlyFee || 3000,
         assignedAt: b.assignedAt || b.createdAt,
-        status: 'Active'
+        createdAt: b.createdAt,
+        status: b.status === 'pending' ? 'Pending (Unlocks in 28 Days)' : 'Active'
       }));
 
     // Comprehensive deduplication map by canonical composite key
@@ -1436,10 +1441,20 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                   <ShieldCheck className="w-4 h-4 text-blue-600" />
                   <span>Profile Completion &amp; Verification</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200/60 px-2.5 py-0.5 rounded-full">
                     {profileCompletionPercent}% Completed
                   </span>
+                  {onCompleteTeacherProfile && (
+                    <button
+                      type="button"
+                      onClick={onCompleteTeacherProfile}
+                      className="px-3 py-1 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-all"
+                    >
+                      <GraduationCap className="w-3.5 h-3.5 text-amber-300" />
+                      <span>Complete Profile</span>
+                    </button>
+                  )}
                   <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">
                     {profileCompletionPercent === 100 ? 'All steps complete' : 'Steps remaining'}
                   </span>
@@ -2207,19 +2222,19 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                       </span>
                     </div>
 
-                    {/* 2. Pending Amount (Tuition cycle in progress, under 30 days) */}
+                    {/* 2. Pending Amount (Tuition cycle in progress, under 28 days) */}
                     <div className="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200/90">
                       <div className="flex items-center justify-between">
                         <span className="text-[11px] text-amber-900 font-bold block">Pending Amount</span>
                         <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-200/70 text-amber-800 uppercase tracking-wider">
-                          Under 30 Days
+                          Under 28 Days
                         </span>
                       </div>
                       <span className="text-xl font-black text-amber-700 block mt-0.5">
                         ₹ {breakdown.pendingAmount.toLocaleString('en-IN')}
                       </span>
                       <span className="text-[10px] text-amber-800/80 font-medium block">
-                        Unlocks to Current Amount upon 1 month tuition completion
+                        80% fee of booked student; unlocks to Available Balance after 28 days
                       </span>
                     </div>
 

@@ -6,6 +6,8 @@ import {
   sendEmailVerification,
   updateProfile,
   onAuthStateChanged,
+  GoogleAuthProvider,
+  signInWithPopup,
   User as FirebaseUser
 } from "firebase/auth";
 import {
@@ -1118,6 +1120,154 @@ export async function loginUserWithFirebase(
   saveUserSessionToStorage(profile);
 
   return profile;
+}
+
+/**
+ * Real-time Google Authentication for Parents and Teachers
+ * Uses Firebase GoogleAuthProvider with popup and synchronizes user session & Firestore document.
+ */
+export async function loginWithGoogleFirebase(
+  expectedRole: 'parent' | 'teacher' = 'parent'
+): Promise<AppUserProfile> {
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
+
+  const userCredential = await signInWithPopup(auth, provider);
+  const firebaseUser = userCredential.user;
+
+  const email = (firebaseUser.email || '').toLowerCase().trim();
+  const displayName = firebaseUser.displayName || email.split('@')[0] || 'User';
+
+  // Check if Admin
+  const isAdminEmail =
+    email === ADMIN_CREDENTIALS.email.toLowerCase() ||
+    email === ADMIN_CREDENTIALS.alternateEmail.toLowerCase();
+
+  if (isAdminEmail) {
+    const adminProfile: AppUserProfile = {
+      uid: firebaseUser.uid,
+      name: displayName || 'Kumari Institute Admin',
+      email: email,
+      role: 'admin',
+      phone: firebaseUser.phoneNumber || '+91 94370 12345',
+      emailVerified: true,
+      profileCompleted: true,
+      avatar: firebaseUser.photoURL || undefined,
+      createdAt: new Date().toISOString(),
+      lastLoginAt: new Date().toISOString(),
+    };
+    saveUserSessionToStorage(adminProfile);
+    saveUserToLocalRegistry(adminProfile);
+    syncUserToPersistence(adminProfile).catch(() => {});
+    return adminProfile;
+  }
+
+  // Check existing profiles across Firestore
+  let existingProfile: AppUserProfile | null = null;
+
+  try {
+    const teacherDoc = await getDoc(doc(db, "teachers", firebaseUser.uid));
+    if (teacherDoc.exists()) {
+      existingProfile = teacherDoc.data() as AppUserProfile;
+    }
+  } catch (err) {
+    console.warn('Google Auth teacher check note:', err);
+  }
+
+  if (!existingProfile) {
+    try {
+      const parentDoc = await getDoc(doc(db, "parents", firebaseUser.uid));
+      if (parentDoc.exists()) {
+        existingProfile = parentDoc.data() as AppUserProfile;
+      }
+    } catch (err) {
+      console.warn('Google Auth parent check note:', err);
+    }
+  }
+
+  // Check local registry
+  if (!existingProfile) {
+    existingProfile = getUserFromLocalRegistry(firebaseUser.uid) || getUserFromLocalRegistry(email);
+  }
+
+  const now = new Date().toISOString();
+
+  if (existingProfile) {
+    const role = existingProfile.role || expectedRole;
+    const updated: AppUserProfile = {
+      ...existingProfile,
+      uid: firebaseUser.uid,
+      name: existingProfile.name || displayName,
+      email: email,
+      role,
+      emailVerified: true,
+      avatar: existingProfile.avatar || firebaseUser.photoURL || undefined,
+      lastLoginAt: now,
+    };
+    saveUserSessionToStorage(updated);
+    saveUserToLocalRegistry(updated);
+    syncUserToPersistence(updated).catch(() => {});
+    return updated;
+  }
+
+  // Create new profile for Google authenticated user
+  const newProfile: AppUserProfile = {
+    uid: firebaseUser.uid,
+    name: displayName,
+    email: email,
+    phone: firebaseUser.phoneNumber || '',
+    role: expectedRole,
+    gender: 'male',
+    emailVerified: true,
+    profileCompleted: false,
+    avatar: firebaseUser.photoURL || undefined,
+    locality: '',
+    enrolledCourses: [],
+    hiredTutors: [],
+    demoBookings: [],
+    tasks: [],
+    progress: {},
+    createdAt: now,
+    lastLoginAt: now,
+  };
+
+  if (expectedRole === 'parent') {
+    const parentData = removeUndefinedFields({
+      ...newProfile,
+      fullName: displayName,
+      childName: '',
+      childGrade: '',
+      childBoard: '',
+      childSchool: '',
+      enrolledCourses: [],
+      hiredTutors: []
+    });
+    await setDoc(doc(db, "parents", firebaseUser.uid), parentData, { merge: true }).catch(() => {});
+  } else {
+    // Simple teacher account without GPS/location in register form
+    const teacherData = removeUndefinedFields({
+      ...newProfile,
+      id: `fb_teacher_${firebaseUser.uid}`,
+      fullName: displayName,
+      qualification: '',
+      experienceYears: 0,
+      experience: '',
+      subjects: [],
+      classesHandled: [],
+      monthlyFee: 0,
+      hourlyRate: 0,
+      rating: 0,
+      reviewCount: 0,
+      profileCompleted: false
+    });
+    await setDoc(doc(db, "teachers", firebaseUser.uid), teacherData, { merge: true }).catch(() => {});
+    await setDoc(doc(db, "tutors_requests", firebaseUser.uid), teacherData, { merge: true }).catch(() => {});
+  }
+
+  saveUserSessionToStorage(newProfile);
+  saveUserToLocalRegistry(newProfile);
+  syncUserToPersistence(newProfile).catch(() => {});
+  return newProfile;
 }
 
 /**
@@ -2444,10 +2594,34 @@ export function subscribeToAllParentsForAdmin(onParentsUpdate: (parents: AppUser
   const parentsMap = new Map<string, AppUserProfile>();
 
   const emit = () => {
-    const sorted = Array.from(parentsMap.values())
+    const rawList = Array.from(parentsMap.values())
       .filter((p) => !isFakeParent(p) && p.role === 'parent')
       .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-    onParentsUpdate(sorted);
+
+    // Strict deduplication by normalized email, phone, and UID to guarantee no duplicates
+    const seenUids = new Set<string>();
+    const seenEmails = new Set<string>();
+    const seenPhones = new Set<string>();
+    const deduplicated: AppUserProfile[] = [];
+
+    for (const p of rawList) {
+      const email = (p.email || '').trim().toLowerCase();
+      const rawPhone = ((p as any).phoneNumber || (p as any).phone || '').replace(/\D/g, '');
+      const phone = rawPhone.length >= 10 ? rawPhone.slice(-10) : '';
+      const uid = (p.uid || '').trim();
+
+      if (uid && seenUids.has(uid)) continue;
+      if (email && seenEmails.has(email)) continue;
+      if (phone && seenPhones.has(phone)) continue;
+
+      if (uid) seenUids.add(uid);
+      if (email) seenEmails.add(email);
+      if (phone) seenPhones.add(phone);
+
+      deduplicated.push(p);
+    }
+
+    onParentsUpdate(deduplicated);
   };
 
   // 1. Fetch from persistent server store (/api/admin/parents)
@@ -2790,6 +2964,7 @@ export async function submitHomeTutorBooking(bookingData: {
   parentEmail?: string;
   studentName: string;
   studentGrade: string;
+  board?: string;
   subjects: string[];
   address: string;
   locality?: string;
@@ -2800,8 +2975,10 @@ export async function submitHomeTutorBooking(bookingData: {
   requestedTutorAvatar?: string;
 }): Promise<{ success: boolean; message: string; bookingId: string }> {
   const bookingId = `book-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const effectiveBoard = bookingData.board || 'CBSE';
   const fullBooking = {
     ...bookingData,
+    board: effectiveBoard,
     id: bookingId,
     status: 'pending',
     createdAt: new Date().toISOString()
@@ -2838,6 +3015,8 @@ export async function submitHomeTutorBooking(bookingData: {
             phone: bookingData.parentPhone || "",
             childName: bookingData.studentName || "",
             childGrade: bookingData.studentGrade || "",
+            childBoard: effectiveBoard,
+            board: effectiveBoard,
             locality: bookingData.locality || bookingData.address || "Rayagada",
             role: "parent",
             bookedTutors: arrayUnion({
@@ -2849,12 +3028,13 @@ export async function submitHomeTutorBooking(bookingData: {
               monthlyFee: bookingData.requestedTutorMonthlyFee,
               studentName: bookingData.studentName,
               grade: bookingData.studentGrade,
+              board: effectiveBoard,
               timing: bookingData.preferredTimeSlot,
               date: new Date().toISOString(),
               status: 'pending'
             }),
             feesAmount: bookingData.requestedTutorMonthlyFee,
-            course: `${bookingData.studentGrade} - ${(bookingData.subjects || []).join(', ')}`,
+            course: `${bookingData.studentGrade} (${effectiveBoard}) - ${(bookingData.subjects || []).join(', ')}`,
             updatedAt: new Date().toISOString()
           },
           { merge: true }
@@ -2864,22 +3044,40 @@ export async function submitHomeTutorBooking(bookingData: {
       }
     }
 
-    // Also register the booked time slot on the teacher doc in Firestore
-    if (bookingData.requestedTutorId && bookingData.preferredTimeSlot) {
+    // Also register the booked student and slot on the teacher doc in Firestore
+    if (bookingData.requestedTutorId) {
       try {
-        const tRef = doc(db, "teachers", bookingData.requestedTutorId);
-        await updateDoc(tRef, {
-          bookedTimeSlots: arrayUnion(bookingData.preferredTimeSlot),
+        const studentRecord = {
+          id: bookingId,
+          bookingId,
+          studentName: bookingData.studentName,
+          name: bookingData.studentName,
+          grade: bookingData.studentGrade,
+          board: effectiveBoard,
+          monthlyFee: bookingData.requestedTutorMonthlyFee,
+          assignedTutorFee: bookingData.requestedTutorMonthlyFee,
+          requestedTutorMonthlyFee: bookingData.requestedTutorMonthlyFee,
+          timing: bookingData.preferredTimeSlot || '5:00 PM - 6:00 PM',
+          assignedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          status: 'pending'
+        };
+
+        const updatePayload: Record<string, any> = {
+          assignedStudents: arrayUnion(studentRecord),
           lastBookedAt: new Date().toISOString()
-        }).catch(() => {});
+        };
+        if (bookingData.preferredTimeSlot) {
+          updatePayload.bookedTimeSlots = arrayUnion(bookingData.preferredTimeSlot);
+        }
+
+        const tRef = doc(db, "teachers", bookingData.requestedTutorId);
+        await updateDoc(tRef, updatePayload).catch(() => {});
 
         const ctRef = doc(db, "complete_tutors", bookingData.requestedTutorId);
-        await updateDoc(ctRef, {
-          bookedTimeSlots: arrayUnion(bookingData.preferredTimeSlot),
-          lastBookedAt: new Date().toISOString()
-        }).catch(() => {});
+        await updateDoc(ctRef, updatePayload).catch(() => {});
       } catch (e) {
-        console.warn('Teacher booked time slot update notice:', e);
+        console.warn('Teacher booked time slot & student update notice:', e);
       }
     }
   } catch (err) {

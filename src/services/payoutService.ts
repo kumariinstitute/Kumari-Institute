@@ -86,11 +86,15 @@ export function calculateTutorEarnings(
   const now = Date.now();
 
   assignedStudents.forEach((student) => {
-    const rawFee = Number(student.monthlyFee) || Number(student.assignedTutorFee) || baseMonthlyPerStudent;
+    const rawFee =
+      Number(student.monthlyFee) ||
+      Number(student.assignedTutorFee) ||
+      Number(student.requestedTutorMonthlyFee) ||
+      baseMonthlyPerStudent;
     const fee = Math.round(rawFee * 0.8);
     totalMonthlyAccrued += fee;
 
-    // Check how many days have elapsed since assignment
+    // Check how many days have elapsed since booking / assignment
     let daysElapsed = 0;
     const dateStr = student.assignedAt || student.createdAt || student.date;
     if (dateStr) {
@@ -100,11 +104,11 @@ export function calculateTutorEarnings(
       }
     }
 
-    // Explicit override if student tuition is marked completed/settled
+    // Explicit override if student tuition is marked completed/settled or 28 days elapsed
     const isCompletedMonth =
       student.monthCompleted === true ||
       student.isMonthCompleted === true ||
-      daysElapsed >= 30;
+      daysElapsed >= 28;
 
     if (isCompletedMonth) {
       totalCurrentEarned += fee;

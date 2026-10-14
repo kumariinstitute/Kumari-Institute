@@ -27,6 +27,7 @@ import {
 import {
   registerUserInFirebase,
   loginUserWithFirebase,
+  loginWithGoogleFirebase,
   sendPasswordResetWithFirebase,
   resendAccountVerificationEmail,
   checkEmailVerificationStatus,
@@ -118,32 +119,47 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [isResendingVerify, setIsResendingVerify] = useState(false);
   const [verifyNotice, setVerifyNotice] = useState<string | null>(null);
 
-  // Tutor Location Cardinals Registration State
-  const [tutorLocality, setTutorLocality] = useState('Indira Nagar');
-  const [tutorLatitude, setTutorLatitude] = useState<number>(19.1691);
-  const [tutorLongitude, setTutorLongitude] = useState<number>(83.4150);
-  const [tutorAddress, setTutorAddress] = useState('Indira Nagar, Rayagada, Odisha - 765001');
-  const [isLocatingTutor, setIsLocatingTutor] = useState(false);
-  const [tutorLocationNotice, setTutorLocationNotice] = useState<string | null>(null);
+  // Google Sign-In Loading State
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
-  // Fetch Live Location for Tutor Registration
-  const handleFetchTutorGpsCardinals = async () => {
-    setIsLocatingTutor(true);
-    setTutorLocationNotice('Acquiring precise GPS satellite fix...');
+  const handleGoogleSignIn = async () => {
+    setLoginError(null);
+    setRegError(null);
+    setIsGoogleLoading(true);
     try {
-      const geo = await getLiveUserLocation((statusMsg) => {
-        setTutorLocationNotice(statusMsg);
-      });
-      setTutorLatitude(geo.latitude);
-      setTutorLongitude(geo.longitude);
-      const locName = geo.placeName || 'Rayagada';
-      setTutorLocality(locName);
-      setTutorAddress(`${locName}, Rayagada, Odisha`);
-      setTutorLocationNotice(`GPS Cardinals Locked: ${geo.latitude.toFixed(4)}° N, ${geo.longitude.toFixed(4)}° E (±${geo.accuracy}m radius)`);
+      const userProfile = await loginWithGoogleFirebase(role);
+      setLoginSuccess(`Welcome, ${userProfile.name}!`);
+
+      if (onLoginSuccess) {
+        onLoginSuccess(userProfile);
+      }
+
+      setTimeout(() => {
+        if (
+          userProfile.role === 'admin' ||
+          userProfile.email.toLowerCase().includes('kkumariinstitut')
+        ) {
+          if (onNavigateAdmin) onNavigateAdmin();
+          else onNavigateHome();
+        } else if (userProfile.role === 'teacher' && !userProfile.profileCompleted) {
+          setMode('teacher-complete-profile');
+        } else {
+          onNavigateHome();
+        }
+      }, 500);
     } catch (err: any) {
-      setTutorLocationNotice(err.message || 'Could not acquire GPS fix. You can choose your Rayagada locality below.');
+      console.warn('Google sign-in error:', err?.code || err?.message);
+      const errMsg =
+        err?.code === 'auth/popup-closed-by-user'
+          ? 'Google sign in was cancelled. Please try again.'
+          : formatFirebaseError(err);
+      if (mode === 'register') {
+        setRegError(errMsg);
+      } else {
+        setLoginError(errMsg);
+      }
     } finally {
-      setIsLocatingTutor(false);
+      setIsGoogleLoading(false);
     }
   };
 
@@ -273,12 +289,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         phone: regPhone.trim(),
         gender: regGender,
         password: regPassword,
-        role: role,
-        latitude: role === 'teacher' ? tutorLatitude : undefined,
-        longitude: role === 'teacher' ? tutorLongitude : undefined,
-        locationArea: role === 'teacher' ? tutorLocality : undefined,
-        locality: role === 'teacher' ? tutorLocality : undefined,
-        address: role === 'teacher' ? tutorAddress : undefined
+        role: role
       });
 
       const registeredEmail = regEmail.trim();
@@ -482,6 +493,18 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
                       <span className="flex-1">{loginSuccess}</span>
                     </div>
+                    {role === 'teacher' && (
+                      <div className="pt-2 border-t border-emerald-200/80">
+                        <button
+                          type="button"
+                          onClick={() => setMode('teacher-complete-profile')}
+                          className="w-full py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                        >
+                          <GraduationCap className="w-3.5 h-3.5 text-amber-300" />
+                          <span>Complete Profile (Teaching Location, GPS & Qualifications)</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -589,6 +612,41 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     <>
                       <span>Log In</span>
                       <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+
+                {/* Google Sign In */}
+                <div className="relative my-3">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-slate-200" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-white px-3 text-slate-500 font-bold">Or continue with</span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  id="google-signin-btn"
+                  onClick={handleGoogleSignIn}
+                  disabled={isGoogleLoading}
+                  className="w-full py-3 px-4 rounded-2xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 font-bold text-sm shadow-xs transition-all flex items-center justify-center gap-3 cursor-pointer disabled:opacity-60 active:scale-[0.99]"
+                >
+                  {isGoogleLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                      <span>Connecting with Google...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                      </svg>
+                      <span>Sign in with Google</span>
                     </>
                   )}
                 </button>
@@ -738,123 +796,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   </div>
                 </div>
 
-                {/* Teacher Location Cardinals & Rayagada Locality Section */}
-                {role === 'teacher' && (
-                  <div className="p-3.5 sm:p-4 rounded-2xl bg-blue-50/70 border border-blue-200/80 space-y-3 text-left">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-blue-200/60">
-                      <div>
-                        <span className="text-xs font-black uppercase tracking-wider text-[#0c2340] flex items-center gap-1.5">
-                          <MapPin className="w-3.5 h-3.5 text-blue-600" />
-                          Teaching Location &amp; GPS Cardinals
-                        </span>
-                        <p className="text-[11px] text-slate-500 mt-0.5">
-                          Required so parents can search and find you as the nearest tutor in Rayagada
-                        </p>
-                      </div>
-
-                      {/* Use Live Location Button */}
-                      <button
-                        type="button"
-                        onClick={handleFetchTutorGpsCardinals}
-                        disabled={isLocatingTutor}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer disabled:opacity-50 self-start sm:self-auto"
-                      >
-                        {isLocatingTutor ? (
-                          <>
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            <span>Acquiring GPS...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Compass className="w-3.5 h-3.5 text-white" />
-                            <span>Use Live Location</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-
-                    {tutorLocationNotice && (
-                      <div className="p-2.5 rounded-xl bg-white/90 border border-blue-200 text-blue-900 text-[11px] font-semibold flex items-center gap-2">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                        <span>{tutorLocationNotice}</span>
-                      </div>
-                    )}
-
-                    {/* Quick Locality Selector */}
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Select Rayagada Locality / Area <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={tutorLocality}
-                        onChange={(e) => {
-                          const selectedName = e.target.value;
-                          setTutorLocality(selectedName);
-                          const matchedLoc = RAYAGADA_LOCALITIES.find(l => l.name === selectedName);
-                          if (matchedLoc) {
-                            setTutorLatitude(matchedLoc.latitude);
-                            setTutorLongitude(matchedLoc.longitude);
-                            setTutorAddress(`${matchedLoc.name}, ${matchedLoc.subtitle || 'Rayagada'}, Odisha - 765001`);
-                            setTutorLocationNotice(`Coordinates updated to ${matchedLoc.name}: ${matchedLoc.latitude.toFixed(4)}° N, ${matchedLoc.longitude.toFixed(4)}° E`);
-                          }
-                        }}
-                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-800 text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      >
-                        {RAYAGADA_LOCALITIES.map((loc) => (
-                          <option key={loc.id} value={loc.name}>
-                            {loc.name} ({loc.landmark})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Cardinal Coordinates Inputs (Latitude & Longitude) */}
-                    <div className="grid grid-cols-2 gap-2.5">
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                          Latitude Cardinal (° N) <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="number"
-                          step="0.0001"
-                          required
-                          value={tutorLatitude}
-                          onChange={(e) => setTutorLatitude(parseFloat(e.target.value) || 19.1691)}
-                          className="w-full px-3 py-2 text-xs font-mono font-bold rounded-xl border border-slate-200 bg-white text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                          Longitude Cardinal (° E) <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="number"
-                          step="0.0001"
-                          required
-                          value={tutorLongitude}
-                          onChange={(e) => setTutorLongitude(parseFloat(e.target.value) || 83.4150)}
-                          className="w-full px-3 py-2 text-xs font-mono font-bold rounded-xl border border-slate-200 bg-white text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Complete Address & Landmarks */}
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                        Residential Address &amp; Landmarks <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={tutorAddress}
-                        onChange={(e) => setTutorAddress(e.target.value)}
-                        placeholder="e.g. Near Chinmaya Vidyalaya, Raniguda Farm, Rayagada - 765001"
-                        className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-white text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                )}
-
                 {/* 5. Password */}
                 <div>
                   <label
@@ -935,6 +876,41 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     <>
                       <Sparkles className="w-4 h-4 text-amber-300" />
                       <span>Create Account</span>
+                    </>
+                  )}
+                </button>
+
+                {/* Google Registration */}
+                <div className="relative my-3">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-slate-200" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-white px-3 text-slate-500 font-bold">Or register with</span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  id="google-register-btn"
+                  onClick={handleGoogleSignIn}
+                  disabled={isGoogleLoading}
+                  className="w-full py-3 px-4 rounded-2xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 font-bold text-sm shadow-xs transition-all flex items-center justify-center gap-3 cursor-pointer disabled:opacity-60 active:scale-[0.99]"
+                >
+                  {isGoogleLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                      <span>Registering with Google...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                      </svg>
+                      <span>Sign up with Google</span>
                     </>
                   )}
                 </button>
@@ -1122,6 +1098,19 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                         : 'Resend Verification Link'}
                     </span>
                   </button>
+
+                  {/* 3. Complete Profile Button for Tutors */}
+                  {role === 'teacher' && (
+                    <button
+                      type="button"
+                      id="verify-email-complete-profile-btn"
+                      onClick={() => setMode('teacher-complete-profile')}
+                      className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                    >
+                      <GraduationCap className="w-4 h-4 text-amber-300" />
+                      <span>Complete Profile (Location, GPS & Qualifications)</span>
+                    </button>
+                  )}
                 </div>
               </div>
             )}
