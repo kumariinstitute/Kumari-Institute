@@ -185,7 +185,7 @@ export const Footer: React.FC<FooterProps> = ({
                 onClick={onOpenEnquiry}
                 className="hover:text-white transition-colors cursor-pointer"
               >
-                • Home Tuition (Class 1 to 5)
+                • Home Tuition (Class 1 to 12)
               </li>
               <li
                 onClick={onOpenEnquiry}

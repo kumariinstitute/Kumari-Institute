@@ -692,8 +692,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
-  // Filtered tutors
+  // Filtered tutors (Only completed & updated profile tutors show in Admin Panel)
   const filteredTutors = tutors.filter((t) => {
+    if ((t as any).profileCompleted === false) return false;
+
     const matchesFilter =
       tutorFilter === 'all'
         ? true
@@ -831,8 +833,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     return true;
   });
 
-  // Filtered Tutors in Directory
+  // Filtered Tutors in Directory (Only completed & updated profile tutors)
   const filteredDirectoryTutors = tutors.filter((t) => {
+    if ((t as any).profileCompleted === false) return false;
+
     if (directorySearch.trim()) {
       const q = directorySearch.toLowerCase().trim();
       const nameMatch = (t.name || '').toLowerCase().includes(q);

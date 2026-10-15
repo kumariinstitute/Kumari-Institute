@@ -27,6 +27,7 @@ export interface TeacherLocationPayload {
   classesHandled?: string[];
   monthlyFee?: number;
   hourlyRate?: number;
+  customFeeSchedule?: any;
   bio?: string;
   gender?: 'male' | 'female';
   teacherType?: 'home' | 'both';

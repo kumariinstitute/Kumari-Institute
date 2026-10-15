@@ -1141,12 +1141,17 @@ export const FindTutorsPage: React.FC<FindTutorsPageProps> = ({
                     <div className="flex items-start gap-4 sm:gap-6 min-w-0 flex-1">
                       {/* Big Tutor Headshot Photo or Initials Placeholder */}
                       <div className="relative shrink-0">
-                        {tutor.avatar ? (
+                        {(tutor.avatar || (tutor as any).photoUrl) ? (
                           <img
-                            src={tutor.avatar}
+                            src={tutor.avatar || (tutor as any).photoUrl}
                             alt={tutor.name}
-                            className="w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-2xl sm:rounded-3xl object-cover border-2 border-slate-100 shadow-sm"
+                            className="w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-2xl sm:rounded-3xl object-cover border-2 border-slate-100 shadow-md ring-1 ring-slate-200/60 bg-slate-100"
                             referrerPolicy="no-referrer"
+                            onError={(e) => {
+                              const target = e.currentTarget;
+                              target.onerror = null;
+                              target.src = 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=400&q=80';
+                            }}
                           />
                         ) : (
                           <div className="w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-[#0c2340] to-blue-800 text-white flex flex-col items-center justify-center border-2 border-slate-100 shadow-sm p-2 text-center">
@@ -1255,41 +1260,23 @@ export const FindTutorsPage: React.FC<FindTutorsPageProps> = ({
                     </div>
                   )}
 
-                  {/* Standardized Fee & Timing Display */}
-                  <div className="mt-4 p-3.5 bg-gradient-to-r from-blue-50/80 via-indigo-50/50 to-purple-50/80 rounded-2xl border border-blue-200/80 space-y-2.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-1.5 font-bold text-[#0c2340]">
-                        <Award className="w-3.5 h-3.5 text-[#1d4ed8]" />
-                        <span>Standard Tuition Fees</span>
+                  {/* Clean Verified Tuition Highlight (Old fee table removed as requested) */}
+                  <div className="mt-3.5 p-3 bg-slate-50/90 rounded-2xl border border-slate-200/80 flex items-center justify-between gap-2 text-left">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+                        <Home className="w-4 h-4" />
                       </div>
-                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-700 bg-white px-2 py-0.5 rounded-md border border-blue-200 shadow-2xs">
-                        Official Rates
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 text-left">
-                      <div className="p-2.5 rounded-xl bg-white/90 border border-blue-100 shadow-2xs">
-                        <span className="block text-[10px] font-bold text-blue-800 uppercase">CBSE Board</span>
-                        <span className="block text-xs font-black text-slate-900 mt-0.5">₹1,200 to ₹3,500</span>
-                        <span className="block text-[9px] text-slate-500 font-medium">6th-10th: ₹3,000-3,500/sub</span>
-                      </div>
-                      <div className="p-2.5 rounded-xl bg-white/90 border border-purple-100 shadow-2xs">
-                        <span className="block text-[10px] font-bold text-purple-800 uppercase">ICSE Board</span>
-                        <span className="block text-xs font-black text-slate-900 mt-0.5">₹1,500 to ₹4,000</span>
-                        <span className="block text-[9px] text-slate-500 font-medium">6th-10th: ₹3,000-4,000/sub</span>
+                      <div>
+                        <span className="block text-xs font-bold text-slate-900">Doorstep Home Tuition</span>
+                        <span className="block text-[11px] text-slate-500">1-on-1 Personalized Mentoring</span>
                       </div>
                     </div>
-
-                    {/* Timings breakdown */}
-                    <div className="pt-1.5 border-t border-blue-100/80 flex items-center justify-between text-[10px] font-bold text-slate-600">
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-[#1d4ed8]" />
-                        <span>1-2 Class: 1 hr</span>
+                    <div className="text-right shrink-0">
+                      <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full inline-block">
+                        {tutor.monthlyFee || (tutor as any)?.customFeeSchedule?.primary1to5
+                          ? `From ₹${Number((tutor as any)?.customFeeSchedule?.primary1to5 || tutor.monthlyFee).toLocaleString('en-IN')}/mo`
+                          : 'Affordable Monthly'}
                       </span>
-                      <span>•</span>
-                      <span>3-4 Class: 1.30 hr</span>
-                      <span>•</span>
-                      <span>5 Class: 2 hr</span>
                     </div>
                   </div>
 

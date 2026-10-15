@@ -190,77 +190,57 @@ export const TutorProfileModal: React.FC<TutorProfileModalProps> = ({
             </div>
           </div>
 
-          {/* Standardized Home Tutor Class Prices (CBSE & ICSE) */}
+          {/* Modern Class-wise Monthly Tuition Fee Structure */}
           <div className="rounded-2xl border border-slate-200/90 overflow-hidden space-y-0">
             <div className="bg-slate-50 p-3.5 border-b border-slate-200 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Award className="w-4 h-4 text-emerald-600" />
                 <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
-                  Standard Home Tutor Class Prices
+                  Monthly Home Tuition Fee Structure
                 </h4>
               </div>
-              <span className="text-[10px] font-bold text-slate-500">Official Institute Rates</span>
+              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                Transparent Monthly Rates
+              </span>
             </div>
 
-            <div className="p-4 space-y-4">
-              {/* Summary Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="p-3 rounded-xl bg-blue-50/70 border border-blue-200/80">
-                  <span className="text-[10px] font-black uppercase text-blue-800 tracking-wider block">
-                    CBSE Board
-                  </span>
+            <div className="p-4 space-y-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div className="p-3 rounded-xl bg-blue-50/80 border border-blue-200/70 text-center">
+                  <span className="text-[10px] font-bold uppercase text-blue-700 tracking-wider block">1st to 5th</span>
                   <span className="text-base font-black text-slate-900 block mt-0.5">
-                    ₹1,200 to ₹3,500 <span className="text-xs font-normal text-slate-500">/ month</span>
+                    ₹{((tutor as any).customFeeSchedule?.primary1to5 || (tutor as any).feePrimary1to5 || tutor.monthlyFee || 1500).toLocaleString('en-IN')}
                   </span>
-                  <span className="text-[11px] text-slate-600 mt-1 block">
-                    6th to 8th: ₹3,000 / subject • 9th to 10th: ₹3,500 / subject
-                  </span>
+                  <span className="text-[10px] text-slate-500 font-medium">/ month</span>
                 </div>
 
-                <div className="p-3 rounded-xl bg-purple-50/70 border border-purple-200/80">
-                  <span className="text-[10px] font-black uppercase text-purple-800 tracking-wider block">
-                    ICSE Board
-                  </span>
+                <div className="p-3 rounded-xl bg-indigo-50/80 border border-indigo-200/70 text-center">
+                  <span className="text-[10px] font-bold uppercase text-indigo-700 tracking-wider block">6th to 8th</span>
                   <span className="text-base font-black text-slate-900 block mt-0.5">
-                    ₹1,500 to ₹4,000 <span className="text-xs font-normal text-slate-500">/ month</span>
+                    ₹{((tutor as any).customFeeSchedule?.middle6to8 || (tutor as any).feeMiddle6to8 || 1800).toLocaleString('en-IN')}
                   </span>
-                  <span className="text-[11px] text-slate-600 mt-1 block">
-                    6th to 8th: ₹3,000 / subject • 8th to 10th: ₹4,000 / subject
+                  <span className="text-[10px] text-slate-500 font-medium">/ month</span>
+                </div>
+
+                <div className="p-3 rounded-xl bg-purple-50/80 border border-purple-200/70 text-center">
+                  <span className="text-[10px] font-bold uppercase text-purple-700 tracking-wider block">9th to 10th</span>
+                  <span className="text-base font-black text-slate-900 block mt-0.5">
+                    ₹{((tutor as any).customFeeSchedule?.secondary9to10 || (tutor as any).feeSecondary9to10 || 2500).toLocaleString('en-IN')}
                   </span>
+                  <span className="text-[10px] text-slate-500 font-medium">/ month</span>
+                </div>
+
+                <div className="p-3 rounded-xl bg-emerald-50/80 border border-emerald-200/70 text-center">
+                  <span className="text-[10px] font-bold uppercase text-emerald-700 tracking-wider block">11th &amp; 12th</span>
+                  <span className="text-base font-black text-slate-900 block mt-0.5">
+                    ₹{((tutor as any).customFeeSchedule?.senior11to12 || (tutor as any).feeSenior11to12 || 3000).toLocaleString('en-IN')}
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-medium">/ subject / mo</span>
                 </div>
               </div>
-
-              {/* Detailed Breakdown Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-200 text-slate-400 font-bold uppercase text-[10px]">
-                      <th className="pb-2">Class</th>
-                      <th className="pb-2 text-blue-700">CBSE Price</th>
-                      <th className="pb-2 text-purple-700">ICSE Price</th>
-                      <th className="pb-2 text-right">Daily Session</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                    {FEE_STRUCTURE.map((item) => (
-                      <tr key={item.classNumber} className="hover:bg-slate-50">
-                        <td className="py-1.5 font-bold">{item.gradeLabel}</td>
-                        <td className="py-1.5 font-semibold text-blue-800">
-                          ₹{item.cbseFee.toLocaleString('en-IN')}
-                          {item.isPerSubject && <span className="text-[10px] text-slate-400">/sub</span>}
-                        </td>
-                        <td className="py-1.5 font-semibold text-purple-800">
-                          ₹{item.icseFee.toLocaleString('en-IN')}
-                          {item.isPerSubject && <span className="text-[10px] text-slate-400">/sub</span>}
-                        </td>
-                        <td className="py-1.5 text-right text-slate-500 text-[11px]">
-                          {item.timingText}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <p className="text-[11px] text-slate-500 text-center">
+                * All tuition fees are billed per month on a 28-day billing cycle with personalized 1-on-1 home attention.
+              </p>
             </div>
           </div>
 

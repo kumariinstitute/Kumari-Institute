@@ -27,6 +27,7 @@ import { ProfilePage } from './components/ProfilePage';
 import { TeacherCompleteProfilePage } from './components/TeacherCompleteProfilePage';
 import { AdminPanel } from './components/AdminPanel';
 import { BottomNav } from './components/BottomNav';
+import { FloatingContactButtons } from './components/FloatingContactButtons';
 import { Program } from './types';
 import {
   subscribeToFirebaseAuth,
@@ -38,10 +39,23 @@ import {
 export type CurrentUser = AppUserProfile;
 
 export default function App() {
-  // Home page opens by default on initial website load
+  // Home page opens by default on initial website load (or admin if authenticated admin)
   const [activeTab, setActiveTab] = useState<
     'home' | 'tutors' | 'gallery' | 'contact' | 'success' | 'about' | 'exam-prep' | 'auth' | 'profile' | 'admin'
-  >('home');
+  >(() => {
+    const saved = loadSavedUserSession();
+    if (
+      saved &&
+      saved.emailVerified === true &&
+      (saved.role === 'admin' ||
+        saved.email?.toLowerCase() === 'kkumariinstitute@gmail.com' ||
+        saved.email?.toLowerCase() === 'kkumariinstiture@gmail.com' ||
+        saved.email?.toLowerCase().includes('kkumariinstitut'))
+    ) {
+      return 'admin';
+    }
+    return 'home';
+  });
   const [authInitialMode, setAuthInitialMode] = useState<AuthViewMode>('login');
   const [authInitialRole, setAuthInitialRole] = useState<'parent' | 'teacher'>('parent');
   const [isCompletingTeacherProfile, setIsCompletingTeacherProfile] = useState(false);
@@ -61,8 +75,17 @@ export default function App() {
       // Ensure only verified accounts can establish an active session in App.tsx
       if (firebaseUser && firebaseUser.emailVerified === true) {
         setCurrentUser(firebaseUser);
-        // If user was on auth tab waiting for verification or logging in, transition smoothly
-        setActiveTab((prev) => (prev === 'auth' ? 'home' : prev));
+        const isAdmin =
+          firebaseUser.role === 'admin' ||
+          firebaseUser.email?.toLowerCase() === 'kkumariinstitute@gmail.com' ||
+          firebaseUser.email?.toLowerCase() === 'kkumariinstiture@gmail.com' ||
+          firebaseUser.email?.toLowerCase().includes('kkumariinstitut');
+        if (isAdmin) {
+          setActiveTab('admin');
+        } else {
+          // If user was on auth tab waiting for verification or logging in, transition smoothly
+          setActiveTab((prev) => (prev === 'auth' ? 'home' : prev));
+        }
       } else {
         setCurrentUser(null);
         // If a user signs out from another tab while on profile, transition to home
@@ -391,6 +414,11 @@ export default function App() {
         onClose={() => setIsResultsModalOpen(false)}
         onBookDemo={handleOpenDemo}
       />
+
+      {/* Realistic Floating WhatsApp and Phone Buttons (Bottom-Right, on top of mobile bottom nav bar) */}
+      {activeTab !== 'admin' && (
+        <FloatingContactButtons />
+      )}
 
       {/* Mobile App-Style Bottom Navigation Bar (< lg) */}
       {activeTab !== 'admin' && (

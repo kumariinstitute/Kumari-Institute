@@ -1417,7 +1417,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                     type="button"
                     onClick={() => {
                       if (onOpenEnquiry) onOpenEnquiry();
-                      else window.location.href = 'tel:+918280036680';
+                      else window.location.href = 'tel:+919439851521';
                     }}
                     className="p-2.5 rounded-xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-left transition-all cursor-pointer"
                   >
@@ -1452,7 +1452,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                       className="px-3 py-1 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-all"
                     >
                       <GraduationCap className="w-3.5 h-3.5 text-amber-300" />
-                      <span>Complete Profile</span>
+                      <span>{isProfileSubmitted || profileCompletionPercent > 0 ? 'Update Profile' : 'Complete Profile'}</span>
                     </button>
                   )}
                   <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">
@@ -1564,7 +1564,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                     onClick={onCompleteTeacherProfile}
                     className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs transition-colors shrink-0 flex items-center gap-1 cursor-pointer self-start sm:self-center shadow-xs"
                   >
-                    <span>Complete Profile</span>
+                    <span>{isProfileSubmitted || profileCompletionPercent > 0 ? 'Update Profile' : 'Complete Profile'}</span>
                     <ChevronRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -1661,7 +1661,58 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
               </div>
             </div>
 
-            {/* 3. Teacher Quick Access */}
+            {/* 3. Parent Reviews & Academic Ratings (Admin-Audited Real-Time) */}
+            <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
+                  <Star className="w-4 h-4 fill-amber-400 text-amber-500" />
+                  <span>Admin-Audited Parent Reviews &amp; Ratings</span>
+                </div>
+                {((liveUser?.reviews && liveUser.reviews.length > 0) || (user?.reviews && user.reviews.length > 0)) && (
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1">
+                    <span>★</span>
+                    <span>{liveUser?.rating || user?.rating || '5.0'} / 5.0</span>
+                  </span>
+                )}
+              </div>
+
+              {((liveUser?.reviews && liveUser.reviews.length > 0) || (user?.reviews && user.reviews.length > 0)) ? (
+                <div className="space-y-3">
+                  {((liveUser?.reviews || user?.reviews) as any[]).map((rev: any, idx: number) => (
+                    <div
+                      key={rev.id || `tutor_rev_${idx}`}
+                      className="p-3.5 rounded-xl bg-slate-50/70 border border-slate-200/80 space-y-1.5 text-xs"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                          <span>{rev.parentName}</span>
+                          <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200 font-semibold">
+                            Admin Verified
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-slate-400">{rev.date || 'Audited Session'}</span>
+                      </div>
+                      <div className="text-amber-500 text-xs tracking-wider">
+                        {'★'.repeat(Math.max(1, Math.min(5, Math.round(Number(rev.rating) || 5))))}
+                      </div>
+                      <p className="text-slate-600 italic leading-relaxed">
+                        "{rev.comment}"
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-6 px-4 text-center bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                  <ShieldCheck className="w-7 h-7 text-emerald-600 mx-auto mb-1.5" />
+                  <p className="text-xs font-bold text-slate-800">100% Genuine Parent Reviews</p>
+                  <p className="text-[11px] text-slate-500 max-w-sm mx-auto mt-1">
+                    Reviews on your profile are published exclusively by Kumari Institute Academic Admin after verifying parent feedback. No unverified ratings are permitted.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* 4. Teacher Quick Access */}
             <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs space-y-3">
               <div className="flex items-center gap-2 text-slate-900 font-bold text-sm border-b border-slate-100 pb-2.5">
                 <BookOpen className="w-4 h-4 text-blue-600" />
@@ -1704,7 +1755,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                   type="button"
                   onClick={() => {
                     if (onOpenEnquiry) onOpenEnquiry();
-                    else window.location.href = 'tel:+918280036680';
+                    else window.location.href = 'tel:+919439851521';
                   }}
                   className="p-3 rounded-xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-left transition-all cursor-pointer flex flex-col justify-between"
                 >

@@ -200,8 +200,8 @@ export interface AppUserProfile {
 }
 
 export const ADMIN_CREDENTIALS = {
-  email: 'kkumariinstiture@gmail.com',
-  alternateEmail: 'kkumariinstitute@gmail.com',
+  email: 'kkumariinstitute@gmail.com',
+  alternateEmail: 'kkumariinstiture@gmail.com',
   password: 'kumari123',
   name: 'Kumari Institute Admin',
   role: 'admin' as const
@@ -1140,6 +1140,8 @@ export async function loginWithGoogleFirebase(
 
   // Check if Admin
   const isAdminEmail =
+    email === 'kkumariinstitute@gmail.com' ||
+    email === 'kkumariinstiture@gmail.com' ||
     email === ADMIN_CREDENTIALS.email.toLowerCase() ||
     email === ADMIN_CREDENTIALS.alternateEmail.toLowerCase();
 
@@ -1149,7 +1151,7 @@ export async function loginWithGoogleFirebase(
       name: displayName || 'Kumari Institute Admin',
       email: email,
       role: 'admin',
-      phone: firebaseUser.phoneNumber || '+91 94370 12345',
+      phone: firebaseUser.phoneNumber || '+91 94398 51521',
       emailVerified: true,
       profileCompleted: true,
       avatar: firebaseUser.photoURL || undefined,
@@ -2448,11 +2450,21 @@ export function subscribeToAllTeachersForAdmin(onTeachersUpdate: (teachers: Tuto
             docId.includes('rakesh-tripathy') ||
             docId.includes('sneha-patel') ||
             docId.includes('sagar-das') ||
-            docId.includes('anita-mohanty') ||
-            docId.startsWith('fb_teacher')
+            docId.includes('anita-mohanty')
           ) {
             return;
           }
+
+          // User Requirement: In the admin panel, all completed profile tutors only have to show.
+          // Logged-in teachers who haven't completed/updated their profile MUST NOT show in the admin panel.
+          const isCompletedProfile = Boolean(
+            data?.profileCompleted === true ||
+            (data?.educationDetails && (data?.address || data?.locality) && ((Array.isArray(data?.availableTimeSlots) && data.availableTimeSlots.length > 0) || (Array.isArray(data?.availableTimings) && data.availableTimings.length > 0)))
+          );
+          if (!isCompletedProfile) {
+            return;
+          }
+
           firestoreTeachers.push(parseFirestoreTeacher(docSnap.id, data));
         });
         onTeachersUpdate(firestoreTeachers);

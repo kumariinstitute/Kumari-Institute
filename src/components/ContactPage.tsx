@@ -187,7 +187,7 @@ export const ContactPage: React.FC<ContactPageProps> = ({
 
                 {/* Contact Option 2: WhatsApp */}
                 <a
-                  href={`https://wa.me/919437281920?text=${encodeURIComponent(
+                  href={`https://wa.me/919439851521?text=${encodeURIComponent(
                     'Hello Kumari Institute, I would like to inquire about courses and admissions.'
                   )}`}
                   target="_blank"

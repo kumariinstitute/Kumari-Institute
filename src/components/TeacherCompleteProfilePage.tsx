@@ -87,6 +87,12 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
 }) => {
   const draftKey = `teacher_profile_draft_${currentUser?.uid || 'guest'}`;
 
+  const isAlreadyCompleted = Boolean(
+    currentUser?.profileCompleted ||
+    (currentUser as any)?.kycStatus === 'approved' ||
+    (currentUser as any)?.kycStatus === 'submitted'
+  );
+
   // 1. Personal Information State
   const [fullName, setFullName] = useState(currentUser?.name || currentUser?.fullName || '');
   const [gender, setGender] = useState(currentUser?.gender || 'female');
@@ -204,14 +210,36 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
     (currentUser as any)?.classesHandled || []
   );
 
+  // 5b. Class-Wise Monthly Fee Structure (Monthly fees charged by tutor)
+  const [feePrimary1to5, setFeePrimary1to5] = useState<string>(
+    (currentUser as any)?.customFeeSchedule?.primary1to5?.toString() ||
+    (currentUser as any)?.feePrimary1to5?.toString() ||
+    '1500'
+  );
+  const [feeMiddle6to8, setFeeMiddle6to8] = useState<string>(
+    (currentUser as any)?.customFeeSchedule?.middle6to8?.toString() ||
+    (currentUser as any)?.feeMiddle6to8?.toString() ||
+    '1800'
+  );
+  const [feeSecondary9to10, setFeeSecondary9to10] = useState<string>(
+    (currentUser as any)?.customFeeSchedule?.secondary9to10?.toString() ||
+    (currentUser as any)?.feeSecondary9to10?.toString() ||
+    '2500'
+  );
+  const [feeSenior11to12, setFeeSenior11to12] = useState<string>(
+    (currentUser as any)?.customFeeSchedule?.senior11to12?.toString() ||
+    (currentUser as any)?.feeSenior11to12?.toString() ||
+    '3000'
+  );
+
   // 6. Professional Details State & Availability
   const [experienceYears, setExperienceYears] = useState(
-    currentUser?.experience || ''
+    currentUser?.experience || '3-5 years'
   );
   const [hourlyCharges, setHourlyCharges] = useState<string>(
     currentUser?.hourlyCharges?.toString() ||
       currentUser?.hourlyFee?.toString() ||
-      ''
+      '150'
   );
   const [availableTimeSlots, setAvailableTimeSlots] = useState<string[]>(
     currentUser?.availableTimeSlots || []
@@ -245,8 +273,9 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
       ? 'in_progress'
       : 'pending';
 
+  // Graduation / Degree is now explicitly OPTIONAL; only 10th & 12th required for completion
   const qualificationsStatus: 'completed' | 'in_progress' | 'pending' =
-    tenthSchool.trim() && twelfthCollege.trim() && degreeCollege.trim()
+    tenthSchool.trim() && twelfthCollege.trim()
       ? 'completed'
       : tenthSchool.trim() || twelfthCollege.trim() || degreeCollege.trim()
       ? 'in_progress'
@@ -367,6 +396,10 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
         if (d.degreeScore) setDegreeScore(d.degreeScore);
         if (d.experienceYears) setExperienceYears(d.experienceYears);
         if (d.hourlyCharges) setHourlyCharges(d.hourlyCharges);
+        if (d.feePrimary1to5) setFeePrimary1to5(d.feePrimary1to5);
+        if (d.feeMiddle6to8) setFeeMiddle6to8(d.feeMiddle6to8);
+        if (d.feeSecondary9to10) setFeeSecondary9to10(d.feeSecondary9to10);
+        if (d.feeSenior11to12) setFeeSenior11to12(d.feeSenior11to12);
         if (Array.isArray(d.availableTimeSlots)) setAvailableTimeSlots(d.availableTimeSlots);
         if (d.bio) setBio(d.bio);
       }
@@ -412,6 +445,10 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
         degreeScore,
         experienceYears,
         hourlyCharges,
+        feePrimary1to5,
+        feeMiddle6to8,
+        feeSecondary9to10,
+        feeSenior11to12,
         availableTimeSlots,
         bio
       };
@@ -454,6 +491,10 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
     degreeScore,
     experienceYears,
     hourlyCharges,
+    feePrimary1to5,
+    feeMiddle6to8,
+    feeSecondary9to10,
+    feeSenior11to12,
     availableTimeSlots,
     bio
   ]);
@@ -645,6 +686,37 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
       return;
     }
 
+    // Check if any image is currently actively uploading to ImgBB
+    if (isUploadingPhoto || tenthImage?.isUploading || twelfthImage?.isUploading || degreeImage?.isUploading || isUploadingAadhaar || aadhaarImage?.isUploading) {
+      showToast('info', 'Images are still uploading to ImgBB. Please wait a few seconds and try again...');
+      return;
+    }
+
+    // Strict User Requirement: If any tutor does not upload images, do not allow them to complete the profile!
+    const effectivePhoto = profilePhoto?.imgbbUrl || profilePhoto?.dataUrl || profilePhotoUrl;
+    if (!effectivePhoto || effectivePhoto.trim() === '') {
+      showToast('info', '⚠️ Profile Photo is required! Please upload your headshot photo before completing your profile.');
+      return;
+    }
+
+    const effectiveTenth = tenthImage?.imgbbUrl || tenthImage?.dataUrl || currentUser?.educationDetails?.tenth?.marksheetUrl;
+    if (!effectiveTenth || effectiveTenth.trim() === '') {
+      showToast('info', '⚠️ 10th Marksheet is required! Please upload your 10th certificate to complete your profile.');
+      return;
+    }
+
+    const effectiveTwelfth = twelfthImage?.imgbbUrl || twelfthImage?.dataUrl || currentUser?.educationDetails?.twelfth?.marksheetUrl;
+    if (!effectiveTwelfth || effectiveTwelfth.trim() === '') {
+      showToast('info', '⚠️ 12th Marksheet is required! Please upload your +2 / 12th certificate to complete your profile.');
+      return;
+    }
+
+    const effectiveAadhaar = aadhaarImage?.imgbbUrl || aadhaarImage?.dataUrl || (currentUser as any)?.aadhaarDocUrl;
+    if (!effectiveAadhaar || effectiveAadhaar.trim() === '') {
+      showToast('info', '⚠️ Aadhaar Card / ID Proof is required! Please upload your Aadhaar document to complete your profile.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const uid = currentUser?.uid || auth.currentUser?.uid || `teacher_${Date.now()}`;
@@ -735,10 +807,20 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
         experienceYears: parseInt(experienceYears) || 4,
         totalExperience: experienceYears,
         experience: experienceYears,
+        customFeeSchedule: {
+          primary1to5: Number(feePrimary1to5) || 1500,
+          middle6to8: Number(feeMiddle6to8) || 1800,
+          secondary9to10: Number(feeSecondary9to10) || 2500,
+          senior11to12: Number(feeSenior11to12) || 3000,
+        },
+        feePrimary1to5: Number(feePrimary1to5) || 1500,
+        feeMiddle6to8: Number(feeMiddle6to8) || 1800,
+        feeSecondary9to10: Number(feeSecondary9to10) || 2500,
+        feeSenior11to12: Number(feeSenior11to12) || 3000,
+        monthlyFee: Number(feePrimary1to5) || 1500,
         hourlyCharges: Number(hourlyCharges) || 100,
         hourlyRate: Number(hourlyCharges) || 100,
         hourlyFee: Number(hourlyCharges) || 100,
-        monthlyFee: (Number(hourlyCharges) || 100) * 30,
         availableTimeSlots: availableTimeSlots,
         timeSlots: availableTimeSlots,
         tuitionModes: ['Home Tuition'],
@@ -787,7 +869,8 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
           experienceYears: parseInt(experienceYears) || 3,
           subjects: selectedSubjects.length > 0 ? selectedSubjects : ['Mathematics', 'Science'],
           classesHandled: selectedClasses.length > 0 ? selectedClasses : ['1st - 6th Class'],
-          monthlyFee: (Number(hourlyCharges) || 100) * 30,
+          monthlyFee: Number(feePrimary1to5) || 1500,
+          customFeeSchedule: teacherPayload.customFeeSchedule,
           hourlyRate: Number(hourlyCharges) || 100,
           bio: bio.trim(),
           gender: gender === 'female' ? 'female' : 'male',
@@ -818,8 +901,14 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
         qualification: effectiveDegreeCourse || 'B.Sc',
         university: effectiveDegreeCollege,
         experience: experienceYears,
-        hourlyCharges: Number(hourlyCharges) || 400,
-        hourlyFee: Number(hourlyCharges) || 400,
+        customFeeSchedule: teacherPayload.customFeeSchedule,
+        feePrimary1to5: Number(feePrimary1to5) || 1500,
+        feeMiddle6to8: Number(feeMiddle6to8) || 1800,
+        feeSecondary9to10: Number(feeSecondary9to10) || 2500,
+        feeSenior11to12: Number(feeSenior11to12) || 3000,
+        monthlyFee: Number(feePrimary1to5) || 1500,
+        hourlyCharges: Number(hourlyCharges) || 100,
+        hourlyFee: Number(hourlyCharges) || 100,
         availableTimeSlots: availableTimeSlots,
         avatar: profilePhoto?.imgbbUrl || profilePhotoUrl,
         photoUrl: profilePhoto?.imgbbUrl || profilePhotoUrl,
@@ -893,10 +982,12 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
         {/* Page Title & Subtitle */}
         <div className="mb-6">
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-            Complete Your Teacher Profile
+            {isAlreadyCompleted ? 'Update Your Teacher Profile' : 'Complete Your Teacher Profile'}
           </h1>
           <p className="text-sm sm:text-base text-slate-500 mt-1">
-            Provide your verified educational credentials and home tuition details for parents in Rayagada.
+            {isAlreadyCompleted
+              ? 'Update your verified educational credentials, monthly class-wise fees, and teaching locations.'
+              : 'Provide your verified educational credentials, monthly class-wise fees, and home tuition details for parents in Rayagada.'}
           </p>
         </div>
 
@@ -1848,6 +1939,9 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
                       3
                     </span>
                     <span>Degree (Graduation) Details</span>
+                    <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                      Optional
+                    </span>
                   </h3>
                   <span className="text-[11px] text-slate-400 font-medium">Undergraduate / Postgrad</span>
                 </div>
@@ -1855,7 +1949,7 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                      University / College (A to Z) <span className="text-red-500">*</span>
+                      University / College (Optional)
                     </label>
                     <select
                       value={degreeCollege}
@@ -1882,7 +1976,7 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
 
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                      Course / Degree (A to Z) <span className="text-red-500">*</span>
+                      Course / Degree (Optional)
                     </label>
                     <select
                       value={degreeCourse}
@@ -1909,7 +2003,7 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
 
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                      Year of Passing <span className="text-red-500">*</span>
+                      Year of Passing (Optional)
                     </label>
                     <div className="relative">
                       <Calendar className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
@@ -1918,7 +2012,6 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
                         value={degreeYear}
                         onChange={(e) => setDegreeYear(e.target.value)}
                         placeholder="YYYY"
-                        required
                         className="w-full pl-8 pr-2.5 py-1.5 text-xs rounded-lg border border-slate-200 bg-white focus:border-blue-500 outline-none"
                       />
                     </div>
@@ -1926,7 +2019,7 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
 
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                      Percentage / CGPA <span className="text-red-500">*</span>
+                      Percentage / CGPA (Optional)
                     </label>
                     <div className="relative">
                       <Percent className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
@@ -1935,7 +2028,6 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
                         value={degreeScore}
                         onChange={(e) => setDegreeScore(e.target.value)}
                         placeholder="e.g. 8.4 CGPA"
-                        required
                         className="w-full pl-8 pr-2.5 py-1.5 text-xs rounded-lg border border-slate-200 bg-white focus:border-blue-500 outline-none"
                       />
                     </div>
@@ -1947,10 +2039,10 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div>
                       <label className="block text-xs font-bold text-slate-800">
-                        Degree Marksheet / Certificate Image <span className="text-red-500">*</span>
+                        Degree Marksheet / Certificate Image (Optional)
                       </label>
                       <p className="text-[11px] text-slate-500">
-                        Upload photo or scan of your graduation degree (JPG, PNG, JPEG only)
+                        Upload photo or scan of your graduation degree if available (JPG, PNG, JPEG only)
                       </p>
                     </div>
 
@@ -2105,6 +2197,8 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
                   '8th Class',
                   '9th Class',
                   '10th Class',
+                  '11th Class',
+                  '12th Class',
                   '1st - 6th Class'
                 ].map((cls) => {
                   const isChecked = selectedClasses.includes(cls);
@@ -2134,6 +2228,104 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
               {selectedClasses.length === 0 && (
                 <p className="text-[11px] text-red-500 mt-1">Please select at least one class</p>
               )}
+            </div>
+
+            {/* Class-Wise Monthly Fee Structure (Simplified Monthly Tuition Charges) */}
+            <div className="pt-3 border-t border-slate-100 space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-900">
+                  Monthly Tuition Fees Charged (Class-Wise) <span className="text-red-500">*</span>
+                </label>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Set the monthly fee you charge for home tuition. 1st to 5th is all-subjects monthly fee; 6th to 12th is monthly fee per subject.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {/* 1. 1st to 5th */}
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5">
+                  <span className="block text-[11px] font-bold text-slate-800">
+                    Class 1st to 5th
+                  </span>
+                  <span className="block text-[10px] text-slate-400 font-medium">All Subjects (Monthly)</span>
+                  <div className="relative flex items-center">
+                    <span className="absolute left-2.5 text-xs font-bold text-slate-500">₹</span>
+                    <input
+                      type="number"
+                      required
+                      min="500"
+                      step="100"
+                      value={feePrimary1to5}
+                      onChange={(e) => setFeePrimary1to5(e.target.value)}
+                      placeholder="1500"
+                      className="w-full pl-7 pr-2.5 py-1.5 text-xs font-bold text-slate-900 rounded-lg border border-slate-300 bg-white focus:border-blue-500 outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* 2. 6th to 8th */}
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5">
+                  <span className="block text-[11px] font-bold text-slate-800">
+                    Class 6th to 8th
+                  </span>
+                  <span className="block text-[10px] text-slate-400 font-medium">Per Subject (Monthly)</span>
+                  <div className="relative flex items-center">
+                    <span className="absolute left-2.5 text-xs font-bold text-slate-500">₹</span>
+                    <input
+                      type="number"
+                      required
+                      min="500"
+                      step="100"
+                      value={feeMiddle6to8}
+                      onChange={(e) => setFeeMiddle6to8(e.target.value)}
+                      placeholder="1800"
+                      className="w-full pl-7 pr-2.5 py-1.5 text-xs font-bold text-slate-900 rounded-lg border border-slate-300 bg-white focus:border-blue-500 outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* 3. 9th & 10th */}
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5">
+                  <span className="block text-[11px] font-bold text-slate-800">
+                    Class 9th &amp; 10th
+                  </span>
+                  <span className="block text-[10px] text-slate-400 font-medium">Per Subject (Monthly)</span>
+                  <div className="relative flex items-center">
+                    <span className="absolute left-2.5 text-xs font-bold text-slate-500">₹</span>
+                    <input
+                      type="number"
+                      required
+                      min="500"
+                      step="100"
+                      value={feeSecondary9to10}
+                      onChange={(e) => setFeeSecondary9to10(e.target.value)}
+                      placeholder="2500"
+                      className="w-full pl-7 pr-2.5 py-1.5 text-xs font-bold text-slate-900 rounded-lg border border-slate-300 bg-white focus:border-blue-500 outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* 4. 11th & 12th */}
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5">
+                  <span className="block text-[11px] font-bold text-slate-800">
+                    Class 11th &amp; 12th
+                  </span>
+                  <span className="block text-[10px] text-slate-400 font-medium">Per Subject (Monthly)</span>
+                  <div className="relative flex items-center">
+                    <span className="absolute left-2.5 text-xs font-bold text-slate-500">₹</span>
+                    <input
+                      type="number"
+                      required
+                      min="500"
+                      step="100"
+                      value={feeSenior11to12}
+                      onChange={(e) => setFeeSenior11to12(e.target.value)}
+                      placeholder="3000"
+                      className="w-full pl-7 pr-2.5 py-1.5 text-xs font-bold text-slate-900 rounded-lg border border-slate-300 bg-white focus:border-blue-500 outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
@@ -2432,11 +2624,11 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
               {isSubmitting ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Submitting Profile...</span>
+                  <span>{isAlreadyCompleted ? 'Saving Profile Updates...' : 'Submitting Profile...'}</span>
                 </>
               ) : (
                 <>
-                  <span>Submit Profile for Verification</span>
+                  <span>{isAlreadyCompleted ? 'Update Profile & Save Changes' : 'Submit Profile for Verification'}</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}

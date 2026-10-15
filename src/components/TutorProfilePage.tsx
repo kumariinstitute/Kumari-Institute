@@ -439,43 +439,98 @@ export const TutorProfilePage: React.FC<TutorProfilePageProps> = ({
           </div>
         </div>
 
-        {/* 10. Parent Reviews */}
+        {/* 10. Parent Reviews (Real-time & Admin-Created Only - No Fake Data) */}
         <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/90 shadow-2xs space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
             <div className="flex items-center gap-2">
-              <Star className="w-4 h-4 fill-amber-400 text-amber-500" />
-              <h2 className="text-xs font-extrabold uppercase tracking-wider text-slate-500">
-                Parent Reviews &amp; Feedback
-              </h2>
-            </div>
-            <span className="text-xs font-bold text-slate-700">
-              ⭐ {tutor.rating || '4.9'} / 5.0
-            </span>
-          </div>
-
-          <div className="space-y-3">
-            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/70 space-y-1.5">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-slate-800">Sujata Patnaik</span>
-                <span className="text-[10px] text-slate-400 font-medium">Raniguda, Rayagada</span>
+              <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-500 flex items-center justify-center font-bold">
+                <Star className="w-4 h-4 fill-amber-400 text-amber-500" />
               </div>
-              <div className="flex text-amber-400 text-xs">★★★★★</div>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                "{tutor.name} has been teaching my son for the past 4 months. He is punctual, patient, and my child's math scores jumped from 62% to 89%!"
-              </p>
+              <div>
+                <h2 className="text-sm font-extrabold text-[#0c2340]">
+                  Parent Reviews &amp; Academic Feedback
+                </h2>
+                <p className="text-[11px] text-slate-500">
+                  Audited &amp; published directly by Kumari Institute Administration
+                </p>
+              </div>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/70 space-y-1.5">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-slate-800">Ramesh Chandra Sahu</span>
-                <span className="text-[10px] text-slate-400 font-medium">Indira Nagar, Rayagada</span>
+            {tutor.reviews && tutor.reviews.length > 0 ? (
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                <span className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200/70 px-2.5 py-1 rounded-full flex items-center gap-1">
+                  <span>★</span>
+                  <span>{tutor.rating ? Number(tutor.rating).toFixed(1) : '5.0'} / 5.0</span>
+                </span>
+                <span className="text-xs text-slate-500 font-medium">
+                  ({tutor.reviews.length} {tutor.reviews.length === 1 ? 'Review' : 'Reviews'})
+                </span>
               </div>
-              <div className="flex text-amber-400 text-xs">★★★★★</div>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                "Very sincere and dedicated home tutor. The best part is the daily discipline and homework tracking. Highly recommended!"
-              </p>
-            </div>
+            ) : (
+              <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-2.5 py-0.5 rounded-full self-start sm:self-auto">
+                Admin-Audited Profile
+              </span>
+            )}
           </div>
+
+          {tutor.reviews && tutor.reviews.length > 0 ? (
+            <div className="space-y-3">
+              {tutor.reviews.map((rev, idx) => (
+                <div
+                  key={rev.id || `review_${idx}`}
+                  className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/80 space-y-2 hover:border-slate-300 transition-colors"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-900">{rev.parentName}</span>
+                      {rev.verifiedBooking !== false && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/70 px-2 py-0.5 rounded-md">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          <span>Verified Parent</span>
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[11px] text-slate-400 font-medium">
+                      {rev.date || 'Recent Session'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-xs">
+                    <div className="flex text-amber-400 text-xs tracking-wider">
+                      {'★'.repeat(Math.max(1, Math.min(5, Math.round(Number(rev.rating) || 5))))}
+                      {'☆'.repeat(5 - Math.max(1, Math.min(5, Math.round(Number(rev.rating) || 5))))}
+                    </div>
+                    {(rev.studentGrade || rev.schoolName || rev.relation) && (
+                      <span className="text-[11px] text-slate-500">
+                        • {rev.relation || rev.studentGrade || 'Primary Student'}{' '}
+                        {rev.schoolName ? `(${rev.schoolName})` : ''}
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="text-xs text-slate-700 leading-relaxed italic bg-white p-3 rounded-xl border border-slate-200/60">
+                    "{rev.comment}"
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="py-7 px-4 text-center rounded-2xl bg-slate-50/60 border border-dashed border-slate-200 space-y-2">
+              <ShieldCheck className="w-8 h-8 text-emerald-600 mx-auto" />
+              <p className="text-xs font-bold text-slate-800">
+                Official Admin-Verified Profile
+              </p>
+              <p className="text-[11px] text-slate-500 max-w-md mx-auto leading-relaxed">
+                No parent reviews published yet for this educator. Kumari Institute maintains strict authenticity — reviews are collected, verified, and published directly by academic coordinators following verified home tuition sessions in Rayagada.
+              </p>
+              <div className="pt-1">
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 bg-white border border-slate-200 px-3 py-1 rounded-full shadow-2xs">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
+                  <span>100% Real Reviews Guarantee</span>
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

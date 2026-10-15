@@ -163,7 +163,7 @@ export const DemoBookingModal: React.FC<DemoBookingModalProps> = ({
 
               <div className="flex flex-col sm:flex-row gap-3">
                 <a
-                  href={`https://wa.me/919876543210?text=Hello%20BrightPath%2C%20I%20just%20booked%20a%20demo%20class%20(Ref%3A%20${bookingRef})`}
+                  href={`https://wa.me/919439851521?text=Hello%20Kumari%20Institute%2C%20I%20just%20booked%20a%20demo%20class%20(Ref%3A%20${bookingRef})`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex-1 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-xs transition-colors text-center"
