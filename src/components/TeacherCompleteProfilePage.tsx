@@ -210,27 +210,65 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
     (currentUser as any)?.classesHandled || []
   );
 
-  // 5b. Class-Wise Monthly Fee Structure (Monthly fees charged by tutor)
-  const [feePrimary1to5, setFeePrimary1to5] = useState<string>(
+  // 5b. Educational Board Selection (CBSE & ICSE) & Class-Wise Monthly Tuition Fees
+  const [selectedBoards, setSelectedBoards] = useState<string[]>(() => {
+    const raw = (currentUser as any)?.boards || (currentUser as any)?.boardsSupported || (currentUser as any)?.customFeeSchedule?.boards;
+    if (Array.isArray(raw) && raw.length > 0) return raw;
+    return ['CBSE', 'ICSE'];
+  });
+  const [activeBoardTab, setActiveBoardTab] = useState<'CBSE' | 'ICSE'>('CBSE');
+
+  // CBSE Fee: 1st to 7th (all subjects), 8th to 10th (per subject), 11th & 12th (per subject)
+  const [feeCbse1to7, setFeeCbse1to7] = useState<string>(
+    (currentUser as any)?.customFeeSchedule?.cbse?.class1to7?.toString() ||
+    (currentUser as any)?.feeClass1to7?.toString() ||
+    (currentUser as any)?.customFeeSchedule?.primary1to7?.toString() ||
     (currentUser as any)?.customFeeSchedule?.primary1to5?.toString() ||
     (currentUser as any)?.feePrimary1to5?.toString() ||
     '1500'
   );
-  const [feeMiddle6to8, setFeeMiddle6to8] = useState<string>(
-    (currentUser as any)?.customFeeSchedule?.middle6to8?.toString() ||
-    (currentUser as any)?.feeMiddle6to8?.toString() ||
-    '1800'
-  );
-  const [feeSecondary9to10, setFeeSecondary9to10] = useState<string>(
+  const [feeCbse8to10, setFeeCbse8to10] = useState<string>(
+    (currentUser as any)?.customFeeSchedule?.cbse?.class8to10?.toString() ||
+    (currentUser as any)?.feeClass8to10?.toString() ||
+    (currentUser as any)?.customFeeSchedule?.middle8to10?.toString() ||
     (currentUser as any)?.customFeeSchedule?.secondary9to10?.toString() ||
     (currentUser as any)?.feeSecondary9to10?.toString() ||
-    '2500'
+    '2000'
   );
-  const [feeSenior11to12, setFeeSenior11to12] = useState<string>(
+  const [feeCbse11to12, setFeeCbse11to12] = useState<string>(
+    (currentUser as any)?.customFeeSchedule?.cbse?.class11to12?.toString() ||
+    (currentUser as any)?.feeClass11to12?.toString() ||
     (currentUser as any)?.customFeeSchedule?.senior11to12?.toString() ||
     (currentUser as any)?.feeSenior11to12?.toString() ||
     '3000'
   );
+
+  // ICSE Fee: 1st to 7th (all subjects), 8th to 10th (per subject), 11th & 12th (per subject)
+  const [feeIcse1to7, setFeeIcse1to7] = useState<string>(
+    (currentUser as any)?.customFeeSchedule?.icse?.class1to7?.toString() ||
+    (currentUser as any)?.customFeeSchedule?.primary1to7?.toString() ||
+    '1800'
+  );
+  const [feeIcse8to10, setFeeIcse8to10] = useState<string>(
+    (currentUser as any)?.customFeeSchedule?.icse?.class8to10?.toString() ||
+    (currentUser as any)?.customFeeSchedule?.middle8to10?.toString() ||
+    '2200'
+  );
+  const [feeIcse11to12, setFeeIcse11to12] = useState<string>(
+    (currentUser as any)?.customFeeSchedule?.icse?.class11to12?.toString() ||
+    (currentUser as any)?.customFeeSchedule?.senior11to12?.toString() ||
+    '3200'
+  );
+
+  // Backward-compatibility aliases
+  const feePrimary1to5 = feeCbse1to7;
+  const setFeePrimary1to5 = setFeeCbse1to7;
+  const feeMiddle6to8 = feeCbse8to10;
+  const setFeeMiddle6to8 = setFeeCbse8to10;
+  const feeSecondary9to10 = feeCbse8to10;
+  const setFeeSecondary9to10 = setFeeCbse8to10;
+  const feeSenior11to12 = feeCbse11to12;
+  const setFeeSenior11to12 = setFeeCbse11to12;
 
   // 6. Professional Details State & Availability
   const [experienceYears, setExperienceYears] = useState(
@@ -804,20 +842,38 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
             marksheetUrl: degreeImage?.imgbbUrl || degreeImage?.dataUrl || ''
           }
         },
-        experienceYears: parseInt(experienceYears) || 4,
+        experienceYears: experienceYears.toLowerCase().includes('fresher') ? 0 : (parseInt(experienceYears) || 0),
         totalExperience: experienceYears,
         experience: experienceYears,
+        boardsSupported: selectedBoards,
+        boards: selectedBoards,
+        feeClass1to7: Number(feeCbse1to7) || 1500,
+        feeClass8to10: Number(feeCbse8to10) || 2000,
+        feeClass11to12: Number(feeCbse11to12) || 3000,
         customFeeSchedule: {
-          primary1to5: Number(feePrimary1to5) || 1500,
-          middle6to8: Number(feeMiddle6to8) || 1800,
-          secondary9to10: Number(feeSecondary9to10) || 2500,
-          senior11to12: Number(feeSenior11to12) || 3000,
+          boards: selectedBoards,
+          cbse: {
+            class1to7: Number(feeCbse1to7) || 1500,
+            class8to10: Number(feeCbse8to10) || 2000,
+            class11to12: Number(feeCbse11to12) || 3000
+          },
+          icse: {
+            class1to7: Number(feeIcse1to7) || 1800,
+            class8to10: Number(feeIcse8to10) || 2200,
+            class11to12: Number(feeIcse11to12) || 3200
+          },
+          primary1to7: Number(feeCbse1to7) || 1500,
+          middle8to10: Number(feeCbse8to10) || 2000,
+          senior11to12: Number(feeCbse11to12) || 3000,
+          primary1to5: Number(feeCbse1to7) || 1500,
+          middle6to8: Number(feeCbse8to10) || 2000,
+          secondary9to10: Number(feeCbse8to10) || 2000
         },
-        feePrimary1to5: Number(feePrimary1to5) || 1500,
-        feeMiddle6to8: Number(feeMiddle6to8) || 1800,
-        feeSecondary9to10: Number(feeSecondary9to10) || 2500,
-        feeSenior11to12: Number(feeSenior11to12) || 3000,
-        monthlyFee: Number(feePrimary1to5) || 1500,
+        feePrimary1to5: Number(feeCbse1to7) || 1500,
+        feeMiddle6to8: Number(feeCbse8to10) || 2000,
+        feeSecondary9to10: Number(feeCbse8to10) || 2000,
+        feeSenior11to12: Number(feeCbse11to12) || 3000,
+        monthlyFee: Number(feeCbse1to7) || 1500,
         hourlyCharges: Number(hourlyCharges) || 100,
         hourlyRate: Number(hourlyCharges) || 100,
         hourlyFee: Number(hourlyCharges) || 100,
@@ -866,10 +922,10 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
           address: compiledAddress,
           locationArea: addressStreet.trim() || addressLandmark.trim() || 'Rayagada',
           qualification: effectiveDegreeCourse || 'B.Sc',
-          experienceYears: parseInt(experienceYears) || 3,
+          experienceYears: experienceYears.toLowerCase().includes('fresher') ? 0 : (parseInt(experienceYears) || 0),
           subjects: selectedSubjects.length > 0 ? selectedSubjects : ['Mathematics', 'Science'],
           classesHandled: selectedClasses.length > 0 ? selectedClasses : ['1st - 6th Class'],
-          monthlyFee: Number(feePrimary1to5) || 1500,
+          monthlyFee: Number(feeCbse1to7) || 1500,
           customFeeSchedule: teacherPayload.customFeeSchedule,
           hourlyRate: Number(hourlyCharges) || 100,
           bio: bio.trim(),
@@ -901,12 +957,18 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
         qualification: effectiveDegreeCourse || 'B.Sc',
         university: effectiveDegreeCollege,
         experience: experienceYears,
+        experienceYears: experienceYears.toLowerCase().includes('fresher') ? 0 : (parseInt(experienceYears) || 0),
+        boardsSupported: selectedBoards,
+        boards: selectedBoards,
+        feeClass1to7: Number(feeCbse1to7) || 1500,
+        feeClass8to10: Number(feeCbse8to10) || 2000,
+        feeClass11to12: Number(feeCbse11to12) || 3000,
         customFeeSchedule: teacherPayload.customFeeSchedule,
-        feePrimary1to5: Number(feePrimary1to5) || 1500,
-        feeMiddle6to8: Number(feeMiddle6to8) || 1800,
-        feeSecondary9to10: Number(feeSecondary9to10) || 2500,
-        feeSenior11to12: Number(feeSenior11to12) || 3000,
-        monthlyFee: Number(feePrimary1to5) || 1500,
+        feePrimary1to5: Number(feeCbse1to7) || 1500,
+        feeMiddle6to8: Number(feeCbse8to10) || 2000,
+        feeSecondary9to10: Number(feeCbse8to10) || 2000,
+        feeSenior11to12: Number(feeCbse11to12) || 3000,
+        monthlyFee: Number(feeCbse1to7) || 1500,
         hourlyCharges: Number(hourlyCharges) || 100,
         hourlyFee: Number(hourlyCharges) || 100,
         availableTimeSlots: availableTimeSlots,
@@ -2230,106 +2292,222 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
               )}
             </div>
 
-            {/* Class-Wise Monthly Fee Structure (Simplified Monthly Tuition Charges) */}
-            <div className="pt-3 border-t border-slate-100 space-y-3">
+            {/* Class-Wise Monthly Fee Structure with Board Selection (CBSE & ICSE) */}
+            <div className="pt-3 border-t border-slate-100 space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-900">
                   Monthly Tuition Fees Charged (Class-Wise) <span className="text-red-500">*</span>
                 </label>
                 <p className="text-[11px] text-slate-500 mt-0.5">
-                  Set the monthly fee you charge for home tuition. 1st to 5th is all-subjects monthly fee; 6th to 12th is monthly fee per subject.
+                  Select educational boards (CBSE &amp; ICSE) and configure monthly tuition fees. 1st to 7th is all-subjects fee; 8th to 10th is per-subject fee; 11th &amp; 12th is per-subject fee.
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                {/* 1. 1st to 5th */}
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5">
-                  <span className="block text-[11px] font-bold text-slate-800">
-                    Class 1st to 5th
+              {/* Board Selector (CBSE and ICSE) at top of fee fields */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/90 space-y-2.5">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <span className="text-xs font-bold text-slate-800">
+                    Select Boards Handled <span className="text-red-500">*</span>
                   </span>
-                  <span className="block text-[10px] text-slate-400 font-medium">All Subjects (Monthly)</span>
-                  <div className="relative flex items-center">
-                    <span className="absolute left-2.5 text-xs font-bold text-slate-500">₹</span>
-                    <input
-                      type="number"
-                      required
-                      min="500"
-                      step="100"
-                      value={feePrimary1to5}
-                      onChange={(e) => setFeePrimary1to5(e.target.value)}
-                      placeholder="1500"
-                      className="w-full pl-7 pr-2.5 py-1.5 text-xs font-bold text-slate-900 rounded-lg border border-slate-300 bg-white focus:border-blue-500 outline-none"
-                    />
-                  </div>
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    (Select CBSE, ICSE, or Both)
+                  </span>
                 </div>
 
-                {/* 2. 6th to 8th */}
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5">
-                  <span className="block text-[11px] font-bold text-slate-800">
-                    Class 6th to 8th
-                  </span>
-                  <span className="block text-[10px] text-slate-400 font-medium">Per Subject (Monthly)</span>
-                  <div className="relative flex items-center">
-                    <span className="absolute left-2.5 text-xs font-bold text-slate-500">₹</span>
-                    <input
-                      type="number"
-                      required
-                      min="500"
-                      step="100"
-                      value={feeMiddle6to8}
-                      onChange={(e) => setFeeMiddle6to8(e.target.value)}
-                      placeholder="1800"
-                      className="w-full pl-7 pr-2.5 py-1.5 text-xs font-bold text-slate-900 rounded-lg border border-slate-300 bg-white focus:border-blue-500 outline-none"
-                    />
-                  </div>
+                <div className="flex flex-wrap gap-2.5">
+                  {(['CBSE', 'ICSE'] as const).map((b) => {
+                    const isSelected = selectedBoards.includes(b);
+                    return (
+                      <button
+                        type="button"
+                        key={b}
+                        onClick={() => {
+                          setSelectedBoards((prev) => {
+                            if (prev.includes(b)) {
+                              if (prev.length === 1) return prev; // keep at least 1
+                              return prev.filter((x) => x !== b);
+                            } else {
+                              return [...prev, b];
+                            }
+                          });
+                        }}
+                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                          isSelected
+                            ? 'bg-[#1d4ed8] text-white shadow-xs'
+                            : 'bg-white text-slate-700 border border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <span>{isSelected ? '✓' : '+'}</span>
+                        <span>{b} Board</span>
+                      </button>
+                    );
+                  })}
                 </div>
 
-                {/* 3. 9th & 10th */}
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5">
-                  <span className="block text-[11px] font-bold text-slate-800">
-                    Class 9th &amp; 10th
-                  </span>
-                  <span className="block text-[10px] text-slate-400 font-medium">Per Subject (Monthly)</span>
-                  <div className="relative flex items-center">
-                    <span className="absolute left-2.5 text-xs font-bold text-slate-500">₹</span>
-                    <input
-                      type="number"
-                      required
-                      min="500"
-                      step="100"
-                      value={feeSecondary9to10}
-                      onChange={(e) => setFeeSecondary9to10(e.target.value)}
-                      placeholder="2500"
-                      className="w-full pl-7 pr-2.5 py-1.5 text-xs font-bold text-slate-900 rounded-lg border border-slate-300 bg-white focus:border-blue-500 outline-none"
-                    />
+                {/* Board View Switcher Tabs */}
+                {selectedBoards.length > 1 && (
+                  <div className="pt-2 flex items-center gap-2 border-t border-slate-200/70">
+                    <span className="text-[11px] text-slate-500 font-medium">Configure fees for:</span>
+                    <div className="inline-flex rounded-xl bg-white p-1 border border-slate-200">
+                      {selectedBoards.map((b) => (
+                        <button
+                          key={`tab_${b}`}
+                          type="button"
+                          onClick={() => setActiveBoardTab(b as 'CBSE' | 'ICSE')}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            activeBoardTab === b
+                              ? 'bg-blue-50 text-blue-700 shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          {b} Fees
+                        </button>
+                      ))}
+                    </div>
                   </div>
+                )}
+              </div>
+
+              {/* 20% Tutor Commission Transparency Notice (Visible to Tutors only) */}
+              <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200/80 text-amber-950 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 rounded-md bg-amber-600 text-white flex items-center justify-center font-black text-xs shrink-0">
+                    %
+                  </div>
+                  <h4 className="text-xs font-bold text-amber-900">
+                    Kumari Institute Commission Policy (20%)
+                  </h4>
+                </div>
+                <p className="text-[11px] text-amber-900 leading-relaxed font-medium">
+                  20% of your tuition fees are payable to Kumari Institute as service commission for parent verification, student lead assignment, timetable management, and continuous academic support. <strong>You receive 80% net take-home earnings directly.</strong>
+                </p>
+              </div>
+
+              {/* Dynamic Fee Inputs for Active Board */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-800">
+                    {activeBoardTab} Monthly Fee Charges:
+                  </span>
+                  <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
+                    {activeBoardTab} Curriculum
+                  </span>
                 </div>
 
-                {/* 4. 11th & 12th */}
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5">
-                  <span className="block text-[11px] font-bold text-slate-800">
-                    Class 11th &amp; 12th
-                  </span>
-                  <span className="block text-[10px] text-slate-400 font-medium">Per Subject (Monthly)</span>
-                  <div className="relative flex items-center">
-                    <span className="absolute left-2.5 text-xs font-bold text-slate-500">₹</span>
-                    <input
-                      type="number"
-                      required
-                      min="500"
-                      step="100"
-                      value={feeSenior11to12}
-                      onChange={(e) => setFeeSenior11to12(e.target.value)}
-                      placeholder="3000"
-                      className="w-full pl-7 pr-2.5 py-1.5 text-xs font-bold text-slate-900 rounded-lg border border-slate-300 bg-white focus:border-blue-500 outline-none"
-                    />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* 1. Class 1st to 7th: All Subjects Fee */}
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5">
+                    <span className="block text-[11px] font-bold text-slate-800">
+                      Class 1st to 7th
+                    </span>
+                    <span className="block text-[10px] text-slate-500 font-medium">
+                      All Subjects (Monthly Fee)
+                    </span>
+                    <div className="relative flex items-center">
+                      <span className="absolute left-2.5 text-xs font-bold text-slate-500">₹</span>
+                      <input
+                        type="number"
+                        required
+                        min="500"
+                        step="100"
+                        value={activeBoardTab === 'CBSE' ? feeCbse1to7 : feeIcse1to7}
+                        onChange={(e) => {
+                          if (activeBoardTab === 'CBSE') setFeeCbse1to7(e.target.value);
+                          else setFeeIcse1to7(e.target.value);
+                        }}
+                        placeholder={activeBoardTab === 'CBSE' ? '1500' : '1800'}
+                        className="w-full pl-7 pr-2.5 py-1.5 text-xs font-bold text-slate-900 rounded-lg border border-slate-300 bg-white focus:border-blue-500 outline-none"
+                      />
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-medium pt-0.5">
+                      Net Take-Home (80%):{' '}
+                      <strong className="text-emerald-700 font-bold">
+                        ₹
+                        {Math.round(
+                          (Number(activeBoardTab === 'CBSE' ? feeCbse1to7 : feeIcse1to7) || 0) * 0.8
+                        )}
+                        /mo
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* 2. Class 8th to 10th: Per Subject Fee */}
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5">
+                    <span className="block text-[11px] font-bold text-slate-800">
+                      Class 8th to 10th
+                    </span>
+                    <span className="block text-[10px] text-slate-500 font-medium">
+                      Per Subject Fee (Monthly)
+                    </span>
+                    <div className="relative flex items-center">
+                      <span className="absolute left-2.5 text-xs font-bold text-slate-500">₹</span>
+                      <input
+                        type="number"
+                        required
+                        min="500"
+                        step="100"
+                        value={activeBoardTab === 'CBSE' ? feeCbse8to10 : feeIcse8to10}
+                        onChange={(e) => {
+                          if (activeBoardTab === 'CBSE') setFeeCbse8to10(e.target.value);
+                          else setFeeIcse8to10(e.target.value);
+                        }}
+                        placeholder={activeBoardTab === 'CBSE' ? '2000' : '2200'}
+                        className="w-full pl-7 pr-2.5 py-1.5 text-xs font-bold text-slate-900 rounded-lg border border-slate-300 bg-white focus:border-blue-500 outline-none"
+                      />
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-medium pt-0.5">
+                      Net Take-Home (80%):{' '}
+                      <strong className="text-emerald-700 font-bold">
+                        ₹
+                        {Math.round(
+                          (Number(activeBoardTab === 'CBSE' ? feeCbse8to10 : feeIcse8to10) || 0) * 0.8
+                        )}
+                        /sub
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* 3. Class 11th & 12th: Per Subject Fee */}
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5">
+                    <span className="block text-[11px] font-bold text-slate-800">
+                      Class 11th &amp; 12th
+                    </span>
+                    <span className="block text-[10px] text-slate-500 font-medium">
+                      Per Subject Fee (Monthly)
+                    </span>
+                    <div className="relative flex items-center">
+                      <span className="absolute left-2.5 text-xs font-bold text-slate-500">₹</span>
+                      <input
+                        type="number"
+                        required
+                        min="500"
+                        step="100"
+                        value={activeBoardTab === 'CBSE' ? feeCbse11to12 : feeIcse11to12}
+                        onChange={(e) => {
+                          if (activeBoardTab === 'CBSE') setFeeCbse11to12(e.target.value);
+                          else setFeeIcse11to12(e.target.value);
+                        }}
+                        placeholder={activeBoardTab === 'CBSE' ? '3000' : '3200'}
+                        className="w-full pl-7 pr-2.5 py-1.5 text-xs font-bold text-slate-900 rounded-lg border border-slate-300 bg-white focus:border-blue-500 outline-none"
+                      />
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-medium pt-0.5">
+                      Net Take-Home (80%):{' '}
+                      <strong className="text-emerald-700 font-bold">
+                        ₹
+                        {Math.round(
+                          (Number(activeBoardTab === 'CBSE' ? feeCbse11to12 : feeIcse11to12) || 0) * 0.8
+                        )}
+                        /sub
+                      </strong>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
-              {/* Teaching Experience */}
+              {/* Teaching Experience with Fresher Option */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                   Total Teaching Experience <span className="text-red-500">*</span>
@@ -2337,8 +2515,9 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
                 <select
                   value={experienceYears}
                   onChange={(e) => setExperienceYears(e.target.value)}
-                  className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all bg-white"
+                  className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all bg-white font-semibold text-slate-800"
                 >
+                  <option value="Fresher">Fresher (New to Teaching)</option>
                   <option value="1-2 years">1-2 years</option>
                   <option value="3-5 years">3-5 years</option>
                   <option value="5-8 years">5-8 years</option>

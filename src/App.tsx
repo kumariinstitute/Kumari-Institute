@@ -59,6 +59,7 @@ export default function App() {
   const [authInitialMode, setAuthInitialMode] = useState<AuthViewMode>('login');
   const [authInitialRole, setAuthInitialRole] = useState<'parent' | 'teacher'>('parent');
   const [isCompletingTeacherProfile, setIsCompletingTeacherProfile] = useState(false);
+  const [isViewingTutorProfile, setIsViewingTutorProfile] = useState(false);
   // Load saved session immediately, strictly verifying email status before setting session in App.tsx
   const [currentUser, setCurrentUser] = useState<AppUserProfile | null>(() => {
     const saved = loadSavedUserSession();
@@ -102,41 +103,49 @@ export default function App() {
   const handleSelectProgram = (program: Program) => setSelectedProgram(program);
 
   const handleNavigateHome = () => {
+    setIsViewingTutorProfile(false);
     setActiveTab('home');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleNavigateTutors = () => {
+    setIsViewingTutorProfile(false);
     setActiveTab('tutors');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleNavigateExamPrep = () => {
+    setIsViewingTutorProfile(false);
     setActiveTab('exam-prep');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleNavigateAbout = () => {
+    setIsViewingTutorProfile(false);
     setActiveTab('about');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleNavigateSuccess = () => {
+    setIsViewingTutorProfile(false);
     setActiveTab('success');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleNavigateGallery = () => {
+    setIsViewingTutorProfile(false);
     setActiveTab('gallery');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleNavigateContact = () => {
+    setIsViewingTutorProfile(false);
     setActiveTab('contact');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleNavigateAdmin = () => {
+    setIsViewingTutorProfile(false);
     setActiveTab('admin');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -145,6 +154,7 @@ export default function App() {
     mode: AuthViewMode = 'login',
     role: 'parent' | 'teacher' = 'parent'
   ) => {
+    setIsViewingTutorProfile(false);
     setAuthInitialMode(mode);
     setAuthInitialRole(role);
     setActiveTab('auth');
@@ -152,6 +162,7 @@ export default function App() {
   };
 
   const handleNavigateProfile = () => {
+    setIsViewingTutorProfile(false);
     setActiveTab('profile');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -172,7 +183,7 @@ export default function App() {
       className="min-h-screen flex flex-col bg-white text-slate-900 font-sans selection:bg-amber-200 selection:text-slate-900 pb-16 lg:pb-0"
     >
       {/* Main Navigation */}
-      {activeTab !== 'admin' && (
+      {activeTab !== 'admin' && !isViewingTutorProfile && (
         <Navbar
           activeTab={activeTab}
           currentUser={currentUser}
@@ -254,6 +265,12 @@ export default function App() {
             onOpenEnquiry={handleOpenEnquiry}
             onOpenDemoBooking={handleOpenDemo}
             onNavigateAuth={handleNavigateAuth}
+            onLoginSuccess={(user) => {
+              setCurrentUser(user);
+            }}
+            onViewingProfileChange={(isViewing) => {
+              setIsViewingTutorProfile(isViewing);
+            }}
           />
         </main>
       ) : activeTab === 'gallery' ? (
@@ -416,12 +433,12 @@ export default function App() {
       />
 
       {/* Realistic Floating WhatsApp and Phone Buttons (Bottom-Right, on top of mobile bottom nav bar) */}
-      {activeTab !== 'admin' && (
+      {activeTab !== 'admin' && !isViewingTutorProfile && (
         <FloatingContactButtons />
       )}
 
       {/* Mobile App-Style Bottom Navigation Bar (< lg) */}
-      {activeTab !== 'admin' && (
+      {activeTab !== 'admin' && !isViewingTutorProfile && (
         <BottomNav
           activeTab={activeTab}
           currentUser={currentUser}

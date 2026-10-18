@@ -59,6 +59,11 @@ export interface Tutor {
   rejectionReason?: string;
   approvedAt?: string;
   submittedAt?: string;
+  customFeeSchedule?: any;
+  feeClass1to7?: number;
+  feeClass8to10?: number;
+  feeClass11to12?: number;
+  boards?: string[];
   availableTimeSlots?: string[];
   bookedTimeSlots?: string[];
   lastBookedAt?: string;

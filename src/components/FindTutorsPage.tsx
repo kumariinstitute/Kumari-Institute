@@ -45,7 +45,13 @@ import {
 import { BookHomeTutorModal } from './BookHomeTutorModal';
 import { TutorProfilePage } from './TutorProfilePage';
 import { getLiveUserLocation, LiveLocationData, searchNearbyTeachers, searchLocationsOnline } from '../services/tutorApi';
-import { subscribeToRealtimeTeachers, subscribeToRealtimeBookings, AppUserProfile } from '../services/firebaseAuth';
+import {
+  subscribeToRealtimeTeachers,
+  subscribeToRealtimeBookings,
+  AppUserProfile,
+  loginWithGoogleFirebase,
+  formatFirebaseError
+} from '../services/firebaseAuth';
 
 interface FindTutorsPageProps {
   currentUser?: AppUserProfile | null;
@@ -53,31 +59,59 @@ interface FindTutorsPageProps {
   onOpenEnquiry: () => void;
   onOpenDemoBooking: () => void;
   onNavigateAuth?: (mode?: 'login' | 'parent-login' | 'teacher-login' | 'create-parent' | 'create-teacher', role?: 'parent' | 'teacher') => void;
+  onLoginSuccess?: (user: AppUserProfile) => void;
+  onViewingProfileChange?: (isViewing: boolean) => void;
 }
 
-const SUBJECT_OPTIONS = [
-  'All Subjects',
-  'Mathematics',
-  'Science',
-  'English',
-  'EVS',
-  'Hindi',
-  'Social Studies'
+export const CLASS_OPTIONS = [
+  'All Classes',
+  '1st',
+  '2nd',
+  '3rd',
+  '4th',
+  '5th',
+  '6th',
+  '7th',
+  '8th',
+  '9th',
+  '10th',
+  '11th',
+  '12th'
 ];
 
-const CLASS_OPTIONS = [
-  'All Classes',
-  '1st to 6th Standard',
-  '1st - 5th Standard',
-  '1st Class',
-  '2nd Class',
-  '3rd Class',
-  '4th Class',
-  '5th Class',
-  '6th Class',
-  '7th - 8th Class',
-  '9th - 10th Class'
+export const BOARD_OPTIONS = [
+  'All Boards',
+  'CBSE',
+  'ICSE'
 ];
+
+// Dynamically resolves subjects based on the selected class
+export const getSubjectOptionsForClass = (cls: string): string[] => {
+  if (['1st', '2nd', '3rd', '4th', '5th'].includes(cls)) {
+    return ['All Subjects', 'Math', 'English', 'Hindi', 'Odia', 'Social', 'Science'];
+  }
+  if (['6th', '7th'].includes(cls)) {
+    return ['All Subjects', 'English', 'Hindi', 'Odia', 'Mathmatics', 'Science', 'Social Science SST'];
+  }
+  if (['8th', '9th', '10th', '11th', '12th'].includes(cls)) {
+    return ['All Subjects', 'Mathmatics', 'Physics', 'Chemistry', 'Biology', 'SST'];
+  }
+  return [
+    'All Subjects',
+    'Math',
+    'Mathmatics',
+    'Science',
+    'English',
+    'Hindi',
+    'Odia',
+    'Social',
+    'Social Science SST',
+    'Physics',
+    'Chemistry',
+    'Biology',
+    'SST'
+  ];
+};
 
 interface LiveLocationState {
   lat: number;
@@ -96,11 +130,38 @@ export const FindTutorsPage: React.FC<FindTutorsPageProps> = ({
   onNavigateHome,
   onOpenEnquiry,
   onOpenDemoBooking,
-  onNavigateAuth
+  onNavigateAuth,
+  onLoginSuccess,
+  onViewingProfileChange
 }) => {
   // Home tutor booking modal state
   const [bookingTutorTarget, setBookingTutorTarget] = useState<Tutor | null>(null);
   const [viewingTutorProfile, setViewingTutorProfile] = useState<Tutor | null>(null);
+
+  useEffect(() => {
+    onViewingProfileChange?.(Boolean(viewingTutorProfile));
+  }, [viewingTutorProfile, onViewingProfileChange]);
+
+  // Direct Google Sign-In as Parent for logged-out users
+  const [isGoogleLoggingIn, setIsGoogleLoggingIn] = useState(false);
+  const [googleAuthError, setGoogleAuthError] = useState<string | null>(null);
+
+  const handleParentGoogleSignIn = async () => {
+    setIsGoogleLoggingIn(true);
+    setGoogleAuthError(null);
+    try {
+      // Authenticates user strictly with 'parent' role
+      const user = await loginWithGoogleFirebase('parent');
+      if (user && onLoginSuccess) {
+        onLoginSuccess(user);
+      }
+    } catch (err: any) {
+      console.error('Parent Google Sign-In error:', err);
+      setGoogleAuthError(formatFirebaseError(err) || 'Failed to sign in with Google. Please try again.');
+    } finally {
+      setIsGoogleLoggingIn(false);
+    }
+  };
 
   const handleBookHomeTutor = (tutor: Tutor) => {
     setBookingTutorTarget(tutor);
@@ -278,10 +339,20 @@ export const FindTutorsPage: React.FC<FindTutorsPageProps> = ({
     return () => unsub();
   }, [currentUser?.uid, currentUser?.email, currentUser?.phone, currentUser?.role]);
 
-  // Subject & Class filter state
-  const [selectedSubject, setSelectedSubject] = useState('All Subjects');
+  // Subject, Class & Board filter state
   const [selectedClass, setSelectedClass] = useState('All Classes');
+  const [selectedBoard, setSelectedBoard] = useState('All Boards');
+  const [selectedSubject, setSelectedSubject] = useState('All Subjects');
   const [sortBy, setSortBy] = useState<'distance' | 'recommended' | 'rating' | 'price_low' | 'price_high' | 'experience'>('distance');
+
+  // Handle class change and reset subject if current subject not in new class options
+  const handleClassChange = (newCls: string) => {
+    setSelectedClass(newCls);
+    const validSubjects = getSubjectOptionsForClass(newCls);
+    if (!validSubjects.includes(selectedSubject)) {
+      setSelectedSubject('All Subjects');
+    }
+  };
 
   // Favorites / Shortlist State
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(() => new Set<string>());
@@ -518,9 +589,16 @@ export const FindTutorsPage: React.FC<FindTutorsPageProps> = ({
         id.includes('sneha-patel') ||
         id.includes('sagar-das') ||
         id.includes('anita-mohanty') ||
-        id.includes('sukumar') ||
-        id.startsWith('fb_teacher')
+        id.includes('sukumar')
       ) {
+        return false;
+      }
+      // Strictly exclude tutors who have NOT updated/completed their profile
+      const hasCompletedProfile = Boolean(
+        t.profileCompleted === true ||
+        (Array.isArray(t.subjects) && t.subjects.length > 0 && Array.isArray(t.classesHandled) && t.classesHandled.length > 0 && (t.educationDetails || t.customFeeSchedule || (t.qualification && t.qualification.trim().length > 0)))
+      );
+      if (!hasCompletedProfile || (t as any).profileCompleted === false) {
         return false;
       }
       // Must be verified and accepted by admin
@@ -559,34 +637,66 @@ export const FindTutorsPage: React.FC<FindTutorsPageProps> = ({
     const queryTokens = hasSpecificQuery ? rawQuery.split(/[\s,+-]+/).filter((w) => w.length >= 2) : [];
 
     return enrichedTutors.filter((tutor) => {
-      // 1. Filter by subject
-      if (selectedSubject !== 'All Subjects') {
-        const matchesSubject = tutor.subjects.some((sub) =>
-          sub.toLowerCase().includes(selectedSubject.toLowerCase())
-        );
-        if (!matchesSubject) return false;
+      // 1. Filter by board (CBSE, ICSE)
+      if (selectedBoard !== 'All Boards') {
+        const targetBoard = selectedBoard.toUpperCase();
+        const tutorBoards = [
+          ...((tutor as any).boards || []),
+          ...((tutor as any).boardsSupported || []),
+          ...((tutor as any).customFeeSchedule?.boards || [])
+        ].map((b: string) => String(b).toUpperCase());
+
+        const matchesBoard =
+          tutorBoards.includes(targetBoard) ||
+          ((tutor as any).board && String((tutor as any).board).toUpperCase().includes(targetBoard)) ||
+          ((tutor as any).customFeeSchedule?.[selectedBoard.toLowerCase()]) ||
+          (tutorBoards.length === 0); // fallback if not explicitly restricted
+
+        if (!matchesBoard) return false;
       }
 
-      // 2. Filter by class
+      // 2. Filter by class (1st to 12th)
       if (selectedClass !== 'All Classes') {
-        const isStandardRange = selectedClass.includes('1st to 6th') || selectedClass.includes('1st - 5th');
+        const targetNumber = selectedClass.replace(/[^0-9]/g, '');
         const matchesClass = tutor.classesHandled.some((cls) => {
-          if (isStandardRange) {
-            const lower = cls.toLowerCase();
-            return (
-              lower.includes('1st') ||
-              lower.includes('2nd') ||
-              lower.includes('3rd') ||
-              lower.includes('4th') ||
-              lower.includes('5th') ||
-              lower.includes('6th') ||
-              lower.includes('standard') ||
-              lower.includes('all')
-            );
+          const lower = cls.toLowerCase();
+          if (lower.includes(selectedClass.toLowerCase())) return true;
+          if (targetNumber) {
+            const num = Number(targetNumber);
+            if (
+              lower.includes(`${targetNumber}st`) ||
+              lower.includes(`${targetNumber}nd`) ||
+              lower.includes(`${targetNumber}rd`) ||
+              lower.includes(`${targetNumber}th`)
+            ) {
+              return true;
+            }
+            if ((lower.includes('1st - 6th') || lower.includes('1st to 6th')) && num >= 1 && num <= 6) return true;
+            if ((lower.includes('1st - 5th') || lower.includes('1st to 5th')) && num >= 1 && num <= 5) return true;
+            if ((lower.includes('1 to 7th') || lower.includes('1st to 7th')) && num >= 1 && num <= 7) return true;
+            if ((lower.includes('8th to 10th') || lower.includes('8 to 10th')) && num >= 8 && num <= 10) return true;
+            if ((lower.includes('11th & 12th') || lower.includes('11 to 12th')) && num >= 11 && num <= 12) return true;
+            if (lower.includes('all')) return true;
           }
-          return cls.toLowerCase().includes(selectedClass.toLowerCase());
+          return false;
         });
         if (!matchesClass) return false;
+      }
+
+      // 3. Filter by subject (Math, English, Hindi, Odia, Social, Science, SST, Physics, Chemistry, Biology, etc.)
+      if (selectedSubject !== 'All Subjects') {
+        const subLower = selectedSubject.toLowerCase();
+        const matchesSubject = tutor.subjects.some((sub) => {
+          const s = sub.toLowerCase();
+          if (s.includes(subLower)) return true;
+          if (subLower === 'math' && (s.includes('math') || s.includes('mathematics') || s.includes('maths'))) return true;
+          if (subLower === 'mathmatics' && (s.includes('math') || s.includes('mathematics') || s.includes('maths'))) return true;
+          if (subLower === 'sst' && (s.includes('sst') || s.includes('social') || s.includes('studies'))) return true;
+          if (subLower === 'social' && (s.includes('social') || s.includes('sst') || s.includes('studies'))) return true;
+          if (subLower === 'social science sst' && (s.includes('social') || s.includes('sst') || s.includes('studies'))) return true;
+          return false;
+        });
+        if (!matchesSubject) return false;
       }
 
       // 3. Search using ALL keywords added in the tutor's address details
@@ -652,7 +762,7 @@ export const FindTutorsPage: React.FC<FindTutorsPageProps> = ({
       if (sortBy === 'experience') return b.experienceYears - a.experienceYears;
       return 0;
     });
-  }, [enrichedTutors, searchRadiusKm, selectedSubject, selectedClass, locationSearchInput, sortBy]);
+  }, [enrichedTutors, searchRadiusKm, selectedSubject, selectedClass, selectedBoard, locationSearchInput, sortBy]);
 
   // Color mapper for subject pills matching the design
   const getSubjectBadgeStyle = (subject: string) => {
@@ -682,7 +792,10 @@ export const FindTutorsPage: React.FC<FindTutorsPageProps> = ({
         <TutorProfilePage
           tutor={viewingTutorProfile}
           currentUser={currentUser}
-          onBack={() => setViewingTutorProfile(null)}
+          onBack={() => {
+            setViewingTutorProfile(null);
+            onViewingProfileChange?.(false);
+          }}
           onBookTutor={(t) => {
             handleBookHomeTutor(t);
           }}
@@ -873,38 +986,34 @@ export const FindTutorsPage: React.FC<FindTutorsPageProps> = ({
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
-              {/* Location Input with Live Distance and Live Location */}
-              <div className="md:col-span-5 relative" ref={searchDropdownRef}>
+              {/* 1. Location Input */}
+              <div className="md:col-span-4 relative" ref={searchDropdownRef}>
                 <div className="flex items-center justify-between mb-1 pl-1">
                   <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                    Enter Location / Address
+                    Location / Address
                   </label>
                   {currentLocation.name && (
-                    <span className="text-[10px] text-blue-700 font-bold truncate max-w-[200px]">
+                    <span className="text-[10px] text-blue-700 font-bold truncate max-w-[150px]">
                       📍 {currentLocation.name.replace(/^📍\s*/, '')}
                     </span>
                   )}
                 </div>
 
-                {/* Input Container - Clean address input without popups */}
                 <div className="relative flex items-center">
-                  {/* Left Location Pin Indicator */}
                   <div className="absolute left-3 flex items-center justify-center pointer-events-none z-10">
                     <MapPin className="w-4 h-4 text-[#1d4ed8]" />
                   </div>
 
-                  {/* Text Input - Direct address entry, filters tutors accurately */}
                   <input
                     type="text"
                     value={locationSearchInput}
                     onChange={(e) => {
                       setLocationSearchInput(e.target.value);
                     }}
-                    placeholder="Enter your address, locality, or landmark..."
+                    placeholder="Address, locality, or landmark..."
                     className="w-full pl-9 pr-9 py-2.5 text-xs sm:text-sm font-bold text-slate-900 bg-slate-50/90 hover:bg-slate-100/90 focus:bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/25 focus:border-[#1d4ed8] transition-all placeholder:text-slate-400 placeholder:font-normal"
                   />
 
-                  {/* Right Control: Clear X Button only */}
                   {locationSearchInput && (
                     <div className="absolute right-2.5 flex items-center">
                       <button
@@ -922,19 +1031,66 @@ export const FindTutorsPage: React.FC<FindTutorsPageProps> = ({
                 </div>
               </div>
 
-              {/* 2. Select Subject */}
+              {/* 2. Select Class (Select First: 1st..12th) */}
               <div className="md:col-span-2">
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1 pl-1">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 pl-1">
+                  Class <span className="text-blue-600 font-black">(1st)</span>
+                </label>
+                <div className="relative flex items-center">
+                  <Briefcase className="w-4 h-4 text-[#1d4ed8] absolute left-3 pointer-events-none" />
+                  <select
+                    id="find-tutors-class-select"
+                    value={selectedClass}
+                    onChange={(e) => handleClassChange(e.target.value)}
+                    className="w-full pl-9 pr-7 py-2.5 text-xs sm:text-sm font-bold text-slate-800 bg-slate-50/80 hover:bg-slate-100/80 focus:bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 appearance-none cursor-pointer transition-all"
+                  >
+                    {CLASS_OPTIONS.map((cls) => (
+                      <option key={cls} value={cls}>
+                        {cls === 'All Classes' ? 'All Classes' : `${cls} Class`}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* 3. Select Board Filter (CBSE, ICSE) */}
+              <div className="md:col-span-2">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 pl-1">
+                  Board
+                </label>
+                <div className="relative flex items-center">
+                  <Layers className="w-4 h-4 text-[#1d4ed8] absolute left-3 pointer-events-none" />
+                  <select
+                    id="find-tutors-board-select"
+                    value={selectedBoard}
+                    onChange={(e) => setSelectedBoard(e.target.value)}
+                    className="w-full pl-9 pr-7 py-2.5 text-xs sm:text-sm font-bold text-slate-800 bg-slate-50/80 hover:bg-slate-100/80 focus:bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 appearance-none cursor-pointer transition-all"
+                  >
+                    {BOARD_OPTIONS.map((b) => (
+                      <option key={b} value={b}>
+                        {b === 'All Boards' ? 'All Boards' : `${b} Board`}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* 4. Select Subject (Dynamically resolved based on class selected) */}
+              <div className="md:col-span-2">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 pl-1">
                   Subject
                 </label>
                 <div className="relative flex items-center">
                   <BookOpen className="w-4 h-4 text-[#1d4ed8] absolute left-3 pointer-events-none" />
                   <select
+                    id="find-tutors-subject-select"
                     value={selectedSubject}
                     onChange={(e) => setSelectedSubject(e.target.value)}
                     className="w-full pl-9 pr-7 py-2.5 text-xs sm:text-sm font-bold text-slate-800 bg-slate-50/80 hover:bg-slate-100/80 focus:bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 appearance-none cursor-pointer transition-all"
                   >
-                    {SUBJECT_OPTIONS.map((sub) => (
+                    {getSubjectOptionsForClass(selectedClass).map((sub) => (
                       <option key={sub} value={sub}>
                         {sub}
                       </option>
@@ -944,30 +1100,8 @@ export const FindTutorsPage: React.FC<FindTutorsPageProps> = ({
                 </div>
               </div>
 
-              {/* 3. Select Class */}
-              <div className="md:col-span-2">
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1 pl-1">
-                  Class
-                </label>
-                <div className="relative flex items-center">
-                  <Briefcase className="w-4 h-4 text-[#1d4ed8] absolute left-3 pointer-events-none" />
-                  <select
-                    value={selectedClass}
-                    onChange={(e) => setSelectedClass(e.target.value)}
-                    className="w-full pl-9 pr-7 py-2.5 text-xs sm:text-sm font-bold text-slate-800 bg-slate-50/80 hover:bg-slate-100/80 focus:bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 appearance-none cursor-pointer transition-all"
-                  >
-                    {CLASS_OPTIONS.map((cls) => (
-                      <option key={cls} value={cls}>
-                        {cls}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 pointer-events-none" />
-                </div>
-              </div>
-
-              {/* 4. Action Buttons: Use Live Location above Search Tutors Button */}
-              <div className="md:col-span-3 flex flex-col gap-1.5 pt-1 md:pt-0">
+              {/* 5. Action Buttons: Use Live Location + Search */}
+              <div className="md:col-span-2 flex flex-col gap-1.5 pt-1 md:pt-0">
                 <button
                   type="button"
                   onClick={handleUseCurrentLocation}
@@ -1082,30 +1216,45 @@ export const FindTutorsPage: React.FC<FindTutorsPageProps> = ({
                 Parent Login Required
               </span>
               <h3 className="text-2xl font-black text-[#0c2340]">
-                Sign In to View Verified Tutors Near You
+                Sign In with Google to View Verified Tutors
               </h3>
               <p className="text-sm text-slate-600 leading-relaxed max-w-md mx-auto">
-                Please log in or create a parent account to explore verified home tutors in Rayagada, inspect credentials, and schedule doorstep tuitions.
+                Sign in securely with your Google account as a Parent to browse verified home tutors in Rayagada, check complete qualifications, fee schedules, and book doorstep trial sessions.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 max-w-md mx-auto">
-              <button
-                type="button"
-                onClick={() => onNavigateAuth?.('login', 'parent')}
-                className="w-full py-3.5 px-4 rounded-xl bg-[#0c2340] hover:bg-slate-900 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
-              >
-                <LogIn className="w-4 h-4 text-amber-400" />
-                <span>Parent Log In</span>
-              </button>
+            {googleAuthError && (
+              <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-medium max-w-md mx-auto text-left flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                <span>{googleAuthError}</span>
+              </div>
+            )}
 
+            {/* Direct Google Log In Section (Logs in as Parent) */}
+            <div className="pt-2 max-w-md mx-auto">
               <button
                 type="button"
-                onClick={() => onNavigateAuth?.('create-parent', 'parent')}
-                className="w-full py-3.5 px-4 rounded-xl bg-[#1d4ed8] hover:bg-blue-800 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
+                id="parent-google-signin-btn"
+                onClick={handleParentGoogleSignIn}
+                disabled={isGoogleLoggingIn}
+                className="w-full py-4 px-6 rounded-2xl bg-white hover:bg-slate-50 border-2 border-slate-200 hover:border-blue-400 text-slate-800 font-extrabold text-sm sm:text-base shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-3.5 cursor-pointer disabled:opacity-60 active:scale-[0.99] group"
               >
-                <UserPlus className="w-4 h-4" />
-                <span>Create New Account</span>
+                {isGoogleLoggingIn ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                    <span>Connecting Google Account...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-6 h-6 shrink-0 group-hover:scale-105 transition-transform" viewBox="0 0 24 24">
+                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                    </svg>
+                    <span>Continue with Google as Parent</span>
+                  </>
+                )}
               </button>
             </div>
 
@@ -1193,8 +1342,9 @@ export const FindTutorsPage: React.FC<FindTutorsPageProps> = ({
                               Qualification pending • Set up profile
                             </span>
                           )}
-                          <span>•</span>
-                          {tutor.experienceYears && tutor.experienceYears > 0 ? (
+                          {(String(tutor.experienceText || (tutor as any).experience || (tutor as any).totalExperience || '')).toLowerCase().includes('fresher') || tutor.experienceYears === 0 ? (
+                            <span className="text-blue-700 font-bold text-xs bg-blue-50 px-2 py-0.5 rounded border border-blue-200">Fresher</span>
+                          ) : tutor.experienceYears && tutor.experienceYears > 0 ? (
                             <span className="text-slate-800 font-bold">{tutor.experienceYears} Years Exp</span>
                           ) : (
                             <span className="text-slate-500 font-normal text-[11px]">Experience pending</span>
@@ -1422,6 +1572,7 @@ export const FindTutorsPage: React.FC<FindTutorsPageProps> = ({
                 onClick={() => {
                   setSelectedSubject('All Subjects');
                   setSelectedClass('All Classes');
+                  setSelectedBoard('All Boards');
                   setSearchRadiusKm(999);
                 }}
                 className="px-4 py-2 rounded-xl bg-blue-50 text-[#1d4ed8] font-bold text-xs hover:bg-blue-100 transition-colors cursor-pointer"

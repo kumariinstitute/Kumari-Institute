@@ -809,14 +809,16 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
           <div className="flex items-center gap-2.5 self-start sm:self-center flex-wrap">
             {isTeacher ? (
               <>
-                <button
-                  type="button"
-                  onClick={() => setIsEditModalOpen(true)}
-                  className="px-3.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Edit3 className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Edit Details</span>
-                </button>
+                {onCompleteTeacherProfile && (
+                  <button
+                    type="button"
+                    onClick={onCompleteTeacherProfile}
+                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#1d4ed8] to-[#1e40af] hover:from-blue-700 hover:to-blue-900 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
+                  >
+                    <GraduationCap className="w-3.5 h-3.5 text-amber-300" />
+                    <span>Complete Profile</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setIsSalaryModalOpen(true)}
@@ -1449,108 +1451,26 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                     <button
                       type="button"
                       onClick={onCompleteTeacherProfile}
-                      className="px-3 py-1 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-all"
+                      className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-all active:scale-95"
                     >
                       <GraduationCap className="w-3.5 h-3.5 text-amber-300" />
-                      <span>{isProfileSubmitted || profileCompletionPercent > 0 ? 'Update Profile' : 'Complete Profile'}</span>
+                      <span>Complete Profile</span>
                     </button>
                   )}
-                  <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">
-                    {profileCompletionPercent === 100 ? 'All steps complete' : 'Steps remaining'}
-                  </span>
                 </div>
               </div>
 
               {/* Visual Progress Bar */}
-              <div className="space-y-3 pt-1">
+              <div className="space-y-2 pt-1">
                 <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
                   <div
                     className={`h-2.5 rounded-full transition-all duration-500 ease-out ${
                       profileCompletionPercent === 100
                         ? 'bg-emerald-600'
-                        : isProfileSubmitted
-                        ? 'bg-amber-500'
-                        : 'bg-red-500'
+                        : 'bg-blue-600'
                     }`}
-                    style={{ width: `${Math.max(profileCompletionPercent, 5)}%` }}
+                    style={{ width: `${Math.max(profileCompletionPercent, 8)}%` }}
                   />
-                </div>
-
-                {/* 4 Distinct Items in Simple Previous Badge Style */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-[11px]">
-                  {/* 1. Personal Info */}
-                  <div
-                    className={`flex items-center gap-1.5 font-semibold px-2.5 py-1.5 rounded-xl border ${
-                      isProfileSubmitted
-                        ? 'text-emerald-700 bg-emerald-50/80 border-emerald-200'
-                        : 'text-red-700 bg-red-50/80 border-red-200'
-                    }`}
-                  >
-                    {isProfileSubmitted ? (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    ) : (
-                      <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
-                    )}
-                    <span>{isProfileSubmitted ? 'Personal Info' : 'Personal Info (Pending)'}</span>
-                  </div>
-
-                  {/* 2. Qualifications */}
-                  <div
-                    className={`flex items-center gap-1.5 font-semibold px-2.5 py-1.5 rounded-xl border ${
-                      isProfileSubmitted
-                        ? 'text-emerald-700 bg-emerald-50/80 border-emerald-200'
-                        : 'text-red-700 bg-red-50/80 border-red-200'
-                    }`}
-                  >
-                    {isProfileSubmitted ? (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    ) : (
-                      <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
-                    )}
-                    <span>{isProfileSubmitted ? 'Qualifications' : 'Qualifications (Pending)'}</span>
-                  </div>
-
-                  {/* 3. Subjects & Pricing */}
-                  <div
-                    className={`flex items-center gap-1.5 font-semibold px-2.5 py-1.5 rounded-xl border ${
-                      isProfileSubmitted
-                        ? 'text-emerald-700 bg-emerald-50/80 border-emerald-200'
-                        : 'text-red-700 bg-red-50/80 border-red-200'
-                    }`}
-                  >
-                    {isProfileSubmitted ? (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    ) : (
-                      <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
-                    )}
-                    <span>{isProfileSubmitted ? 'Subjects & Pricing' : 'Subjects & Pricing (Pending)'}</span>
-                  </div>
-
-                  {/* 4. KYC Verification: Red before submission, Yellow (Pending Verification) after submission */}
-                  <div
-                    className={`flex items-center gap-1.5 font-semibold px-2.5 py-1.5 rounded-xl border ${
-                      isKycVerified
-                        ? 'text-emerald-700 bg-emerald-50/80 border-emerald-200'
-                        : isProfileSubmitted
-                        ? 'text-amber-700 bg-amber-50/90 border-amber-300'
-                        : 'text-red-700 bg-red-50/80 border-red-200'
-                    }`}
-                  >
-                    {isKycVerified ? (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    ) : isProfileSubmitted ? (
-                      <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                    ) : (
-                      <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
-                    )}
-                    <span>
-                      {isKycVerified
-                        ? 'KYC Completed'
-                        : isProfileSubmitted
-                        ? 'KYC (Pending Verification)'
-                        : 'KYC Verification (Pending)'}
-                    </span>
-                  </div>
                 </div>
               </div>
 

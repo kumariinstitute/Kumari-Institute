@@ -40,7 +40,23 @@ export const TutorProfilePage: React.FC<TutorProfilePageProps> = ({
   onOpenEnquiry
 }) => {
   const [copiedLink, setCopiedLink] = useState(false);
+  const [selectedBoard, setSelectedBoard] = useState<'CBSE' | 'ICSE'>('CBSE');
   const tutorPhoto = tutor.avatar || (tutor as any).photoUrl || (tutor as any).image || '';
+
+  // Calculate accurate fees from tutor uploaded data
+  const cbseFees = {
+    class1to7: Number(tutor.customFeeSchedule?.cbse?.class1to7) || Number(tutor.feeClass1to7) || Number(tutor.customFeeSchedule?.primary1to7) || Number((tutor as any).feePrimary1to5) || Number(tutor.monthlyFee) || 1500,
+    class8to10: Number(tutor.customFeeSchedule?.cbse?.class8to10) || Number(tutor.feeClass8to10) || Number(tutor.customFeeSchedule?.middle8to10) || Number((tutor as any).feeSecondary9to10) || 2000,
+    class11to12: Number(tutor.customFeeSchedule?.cbse?.class11to12) || Number(tutor.feeClass11to12) || Number(tutor.customFeeSchedule?.senior11to12) || Number((tutor as any).feeSenior11to12) || 3000
+  };
+
+  const icseFees = {
+    class1to7: Number(tutor.customFeeSchedule?.icse?.class1to7) || Math.round(cbseFees.class1to7 * 1.15) || 1800,
+    class8to10: Number(tutor.customFeeSchedule?.icse?.class8to10) || Math.round(cbseFees.class8to10 * 1.1) || 2200,
+    class11to12: Number(tutor.customFeeSchedule?.icse?.class11to12) || Math.round(cbseFees.class11to12 * 1.1) || 3200
+  };
+
+  const activeFees = selectedBoard === 'CBSE' ? cbseFees : icseFees;
 
   const handleShare = async () => {
     if (navigator.share) {
@@ -66,20 +82,31 @@ export const TutorProfilePage: React.FC<TutorProfilePageProps> = ({
 
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-800 pb-28 lg:pb-16 antialiased">
-      {/* 1. Mobile-First Sticky Top Navigation Bar */}
+      {/* 1. Mobile-First Sticky Top Navigation Bar with Book Now Button */}
       <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/90 shadow-2xs">
-        <div className="max-w-3xl mx-auto px-4 h-14 sm:h-16 flex items-center justify-between gap-3">
+        <div className="max-w-3xl mx-auto px-4 h-14 sm:h-16 flex items-center justify-between gap-2 sm:gap-3">
           <button
             type="button"
             onClick={onBack}
-            className="flex items-center gap-2 py-1.5 px-3 -ml-2 rounded-xl text-slate-700 hover:text-slate-950 hover:bg-slate-100 transition-colors font-bold text-xs sm:text-sm cursor-pointer"
+            className="flex items-center gap-1.5 sm:gap-2 py-1.5 px-2.5 sm:px-3 -ml-1 sm:-ml-2 rounded-xl text-slate-700 hover:text-slate-950 hover:bg-slate-100 transition-colors font-bold text-xs sm:text-sm cursor-pointer"
             aria-label="Back to tutors list"
           >
             <ArrowLeft className="w-4 h-4 text-slate-800" />
-            <span>Back to Tutors</span>
+            <span>Back</span>
           </button>
 
           <div className="flex items-center gap-2">
+            {/* BOOK NOW BUTTON IN NAVBAR */}
+            <button
+              type="button"
+              id="profile-nav-book-now-btn"
+              onClick={() => onBookTutor(tutor)}
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#0c2340] to-[#1d4ed8] hover:from-[#122e54] hover:to-blue-700 text-white font-bold text-xs sm:text-sm shadow-md hover:shadow-lg transition-all active:scale-[0.98] cursor-pointer flex items-center gap-1.5 shrink-0"
+            >
+              <Home className="w-3.5 h-3.5 text-amber-300" />
+              <span>Book Now</span>
+            </button>
+
             <button
               type="button"
               onClick={handleShare}
@@ -171,7 +198,9 @@ export const TutorProfilePage: React.FC<TutorProfilePageProps> = ({
                 <span className="text-slate-800 font-bold">{tutor.qualification || 'Graduate Tutor'}</span>
                 <span>•</span>
                 <span className="text-blue-700 font-bold">
-                  {tutor.experienceYears ? `${tutor.experienceYears} Years Teaching Experience` : 'Experienced Educator'}
+                  {(String(tutor.experienceText || (tutor as any).experience || (tutor as any).totalExperience || '')).toLowerCase().includes('fresher') || tutor.experienceYears === 0
+                    ? 'Fresher Educator (New to Teaching)'
+                    : (tutor.experienceYears ? `${tutor.experienceYears} Years Teaching Experience` : 'Experienced Educator')}
                 </span>
               </p>
 
@@ -291,6 +320,139 @@ export const TutorProfilePage: React.FC<TutorProfilePageProps> = ({
             ) : (
               <span className="text-xs text-slate-400 italic">1st to 10th Standard (CBSE &amp; ICSE)</span>
             )}
+          </div>
+        </div>
+
+        {/* Monthly Tuition Fee Structure & Tutor Earning Calculations (Before Daily Timings) */}
+        <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/90 shadow-2xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-black text-sm shrink-0">
+                ₹
+              </div>
+              <div>
+                <h2 className="text-sm sm:text-base font-extrabold text-[#0c2340]">
+                  Monthly Tuition Fees Charged (Class-Wise)
+                </h2>
+                <p className="text-[11px] text-slate-500">
+                  Accurate verified fee schedule according to educational board (CBSE &amp; ICSE)
+                </p>
+              </div>
+            </div>
+
+            {/* Board Selector Tabs: CBSE vs ICSE */}
+            <div className="inline-flex rounded-xl bg-slate-100 p-1 border border-slate-200/80 self-start sm:self-auto">
+              {(['CBSE', 'ICSE'] as const).map((b) => (
+                <button
+                  key={`tutor_fee_board_${b}`}
+                  type="button"
+                  onClick={() => setSelectedBoard(b)}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    selectedBoard === b
+                      ? 'bg-white text-blue-700 shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {b} Board
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Fee Cards Grid: 1st-7th all subjects, 8th-10th per subject, 11th-12th per subject */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+            {/* 1. Class 1st to 7th */}
+            <div className="p-4 rounded-2xl bg-gradient-to-b from-blue-50/60 to-slate-50/60 border border-blue-100/80 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-900">Class 1st to 7th</span>
+                <span className="text-[10px] font-semibold text-blue-700 bg-white px-2 py-0.5 rounded-md border border-blue-200">
+                  All Subjects
+                </span>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-black text-[#0c2340]">
+                  ₹{activeFees.class1to7}
+                </span>
+                <span className="text-xs text-slate-500 font-medium">/ month</span>
+              </div>
+              <p className="text-[11px] text-slate-600 leading-tight">
+                Complete all-subjects home coaching curriculum for {selectedBoard}.
+              </p>
+              <div className="pt-2 border-t border-slate-200/70 space-y-1">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-slate-500 font-medium">Tutor Earning (80%):</span>
+                  <span className="font-extrabold text-emerald-700">
+                    ₹{Math.round(activeFees.class1to7 * 0.8)}/mo
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-slate-400">
+                  <span>Institute Commission (20%):</span>
+                  <span>₹{Math.round(activeFees.class1to7 * 0.2)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. Class 8th to 10th */}
+            <div className="p-4 rounded-2xl bg-gradient-to-b from-blue-50/60 to-slate-50/60 border border-blue-100/80 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-900">Class 8th to 10th</span>
+                <span className="text-[10px] font-semibold text-purple-700 bg-white px-2 py-0.5 rounded-md border border-purple-200">
+                  Per Subject
+                </span>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-black text-[#0c2340]">
+                  ₹{activeFees.class8to10}
+                </span>
+                <span className="text-xs text-slate-500 font-medium">/ subject / mo</span>
+              </div>
+              <p className="text-[11px] text-slate-600 leading-tight">
+                Subject-specific intensive coaching for {selectedBoard} board exams.
+              </p>
+              <div className="pt-2 border-t border-slate-200/70 space-y-1">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-slate-500 font-medium">Tutor Earning (80%):</span>
+                  <span className="font-extrabold text-emerald-700">
+                    ₹{Math.round(activeFees.class8to10 * 0.8)}/sub
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-slate-400">
+                  <span>Institute Commission (20%):</span>
+                  <span>₹{Math.round(activeFees.class8to10 * 0.2)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Class 11th & 12th */}
+            <div className="p-4 rounded-2xl bg-gradient-to-b from-blue-50/60 to-slate-50/60 border border-blue-100/80 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-900">Class 11th &amp; 12th</span>
+                <span className="text-[10px] font-semibold text-amber-700 bg-white px-2 py-0.5 rounded-md border border-amber-200">
+                  Per Subject
+                </span>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-black text-[#0c2340]">
+                  ₹{activeFees.class11to12}
+                </span>
+                <span className="text-xs text-slate-500 font-medium">/ subject / mo</span>
+              </div>
+              <p className="text-[11px] text-slate-600 leading-tight">
+                Higher secondary subject coaching (+2 science, commerce, arts).
+              </p>
+              <div className="pt-2 border-t border-slate-200/70 space-y-1">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-slate-500 font-medium">Tutor Earning (80%):</span>
+                  <span className="font-extrabold text-emerald-700">
+                    ₹{Math.round(activeFees.class11to12 * 0.8)}/sub
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-slate-400">
+                  <span>Institute Commission (20%):</span>
+                  <span>₹{Math.round(activeFees.class11to12 * 0.2)}</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 

@@ -142,6 +142,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     | 'incoming_bookings'
     | 'parents'
     | 'tutors_requests'
+    | 'unprofile_tutors'
     | 'tutors_directory'
     | 'complete_tutors'
     | 'received_fees'
@@ -163,6 +164,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     | 'registered_directory'
     | 'tutor_withdrawals'
   >('incoming_bookings');
+
+  // Un-profile updated tutors search state
+  const [unprofileSearch, setUnprofileSearch] = useState<string>('');
 
   // Received Fees state
   const [receivedFeesList, setReceivedFeesList] = useState<ReceivedFeeRecord[]>([]);
@@ -692,10 +696,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
-  // Filtered tutors (Only completed & updated profile tutors show in Admin Panel)
-  const filteredTutors = tutors.filter((t) => {
+  // Helper to distinguish un-profile updated tutors from completed/submitted tutors
+  const isTutorProfileUpdated = (t: Tutor): boolean => {
     if ((t as any).profileCompleted === false) return false;
+    if ((t as any).profileCompleted === true) return true;
+    const hasSubs = Array.isArray(t.subjects) && t.subjects.length > 0;
+    const hasClasses = Array.isArray(t.classesHandled) && t.classesHandled.length > 0;
+    const hasQual = Boolean(t.qualification && t.qualification.trim().length > 0);
+    return hasSubs && hasClasses && hasQual;
+  };
 
+  // Registered tutors who have NOT yet completed/updated their profile
+  const unprofileUpdatedTutors = tutors.filter((t) => !isTutorProfileUpdated(t));
+
+  // Registered tutors who HAVE completed their profile (eligible for verification and directory)
+  const profileUpdatedTutors = tutors.filter((t) => isTutorProfileUpdated(t));
+
+  // Filtered tutors for Tutors Request / Verification section (Only completed & updated profile tutors)
+  const filteredTutors = profileUpdatedTutors.filter((t) => {
     const matchesFilter =
       tutorFilter === 'all'
         ? true
@@ -716,7 +734,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   });
 
   // Approved tutors available for assignment
-  const approvedTutors = tutors.filter((t) => t.isApproved === true || t.status === 'approved');
+  const approvedTutors = profileUpdatedTutors.filter((t) => t.isApproved === true || t.status === 'approved');
 
   // Filtered bookings
   const pendingBookings = bookings.filter((b) => b.status === 'pending');
@@ -760,9 +778,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   });
 
   // Count summaries
-  const pendingTutorsCount = tutors.filter((t) => t.status === 'pending' || !t.isApproved).length;
-  const approvedTutorsCount = tutors.filter((t) => t.status === 'approved' || t.isApproved).length;
-  const rejectedTutorsCount = tutors.filter((t) => t.status === 'rejected').length;
+  const pendingTutorsCount = profileUpdatedTutors.filter((t) => t.status === 'pending' || !t.isApproved).length;
+  const approvedTutorsCount = profileUpdatedTutors.filter((t) => t.status === 'approved' || t.isApproved).length;
+  const rejectedTutorsCount = profileUpdatedTutors.filter((t) => t.status === 'rejected').length;
 
   // Registered Parents Directory Analysis & Booking Status Detection
   const getParentBookingStatus = (parent: AppUserProfile): 'assigned' | 'pending' | 'unassigned' => {
@@ -880,6 +898,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             p.uid === directAssignParent.uid
               ? {
                   ...p,
+                  assignedTutor: tutorObj.name,
+                  assignedTutorId: tutorObj.id,
+                  assignedTutorPhone: tutorObj.phone,
+                  feesAmount: tutorObj.monthlyFee || p.feesAmount,
                   assignedEducator: {
                     id: tutorObj.id,
                     name: tutorObj.name,
@@ -902,6 +924,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     } finally {
       setIsDirectAssigning(false);
     }
+  };
+
+  // Open modal to change / reassign tutor for an already assigned parent
+  const handleOpenChangeTutorForParent = (parent: AppUserProfile) => {
+    setDirectAssignParent(parent);
+    const currentTutorId =
+      parent.assignedTutorId ||
+      parent.assignedEducator?.id ||
+      (Array.isArray(parent.hiredTutors) && parent.hiredTutors[0]?.tutorId) ||
+      (Array.isArray(parent.bookedTutors) && parent.bookedTutors[0]?.tutorId);
+    const diffTutor = approvedTutors.find((t) => t.id !== currentTutorId);
+    setDirectAssignTutorId(diffTutor ? diffTutor.id : approvedTutors[0]?.id || '');
+    setDirectAssignNotes(`Tutor reassigned by admin. Previous: ${parent.assignedTutor || parent.assignedEducator?.name || 'Home Tutor'}`);
   };
 
   // Connect registered parent to tutor (initiated from Tutors Directory)
@@ -1997,6 +2032,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 ) : (
                   <span className="text-[10px] text-slate-400 font-semibold">{tutorRequests.length}</span>
                 )}
+              </button>
+
+              {/* 3b. Un-Profile Updated Tutors */}
+              <button
+                type="button"
+                id="admin-tab-unprofile-tutors"
+                onClick={() => {
+                  setActiveTab('unprofile_tutors');
+                  setIsMobileNavOpen(false);
+                }}
+                className={`w-full px-3 py-2.5 rounded-xl font-bold flex items-center justify-between transition-all cursor-pointer text-left ${
+                  activeTab === 'unprofile_tutors'
+                    ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800/80'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <Clock className="w-4 h-4 shrink-0 text-amber-400" />
+                  <span className="truncate">Un-Profile Updated Tutors</span>
+                </div>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
+                  activeTab === 'unprofile_tutors'
+                    ? 'bg-slate-950 text-amber-300'
+                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                }`}>
+                  {unprofileUpdatedTutors.length}
+                </span>
               </button>
 
               {/* 4. Tutors Directory */}

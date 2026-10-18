@@ -2217,7 +2217,9 @@ export function subscribeToRealtimeTeachers(onTeachersUpdate: (teachers: Tutor[]
             phone: data.phone,
             qualification: data.highestQualification || data.qualification || "",
             experienceYears: typeof data.experienceYears === 'number' ? data.experienceYears : 0,
-            experienceText: typeof data.experienceYears === 'number' && data.experienceYears > 0 ? `${data.experienceYears}+ Yrs Exp` : '',
+            experienceText: (String(data.experienceText || data.experience || data.totalExperience || '')).toLowerCase().includes('fresher')
+              ? 'Fresher'
+              : (typeof data.experienceYears === 'number' && data.experienceYears > 0 ? `${data.experienceYears}+ Yrs Exp` : 'Fresher'),
             subjects: Array.isArray(data.subjects) ? data.subjects : [],
             distanceKm: 0,
             availabilityText: data.availabilityText || "Available for Home Tuition",
@@ -2269,6 +2271,11 @@ export function subscribeToRealtimeTeachers(onTeachersUpdate: (teachers: Tutor[]
             educationDetails: data.educationDetails,
             aadhaarNumber: data.aadhaarNumber,
             aadhaarDocUrl: data.aadhaarDocUrl,
+            customFeeSchedule: data.customFeeSchedule,
+            feeClass1to7: data.feeClass1to7 || data.customFeeSchedule?.cbse?.class1to7 || data.customFeeSchedule?.primary1to7 || data.feePrimary1to5,
+            feeClass8to10: data.feeClass8to10 || data.customFeeSchedule?.cbse?.class8to10 || data.customFeeSchedule?.middle8to10 || data.feeSecondary9to10,
+            feeClass11to12: data.feeClass11to12 || data.customFeeSchedule?.cbse?.class11to12 || data.customFeeSchedule?.senior11to12 || data.feeSenior11to12,
+            boards: data.boards || data.boardsSupported || data.customFeeSchedule?.boards || ['CBSE', 'ICSE'],
             availableTimeSlots: Array.isArray(data.availableTimeSlots) ? data.availableTimeSlots : [],
             reviews: Array.isArray(data.reviews) ? data.reviews : []
           });
