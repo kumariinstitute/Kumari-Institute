@@ -49,6 +49,8 @@ export const CLASS_TIMINGS: Record<number, string> = {
   8: '1.30 hr / session',
   9: '1.5 - 2 hr / session',
   10: '1.5 - 2 hr / session',
+  11: '1.5 - 2 hr / session',
+  12: '1.5 - 2 hr / session',
 };
 
 export const FEE_STRUCTURE: ClassFeeRule[] = [
@@ -62,6 +64,8 @@ export const FEE_STRUCTURE: ClassFeeRule[] = [
   { gradeLabel: '8th Class', classNumber: 8, cbseFee: 3000, icseFee: 3000, isPerSubject: true, timingText: '1.30 hr' },
   { gradeLabel: '9th Class', classNumber: 9, cbseFee: 3500, icseFee: 4000, isPerSubject: true, timingText: '1.5 - 2 hr' },
   { gradeLabel: '10th Class', classNumber: 10, cbseFee: 3500, icseFee: 4000, isPerSubject: true, timingText: '1.5 - 2 hr' },
+  { gradeLabel: '11th Class', classNumber: 11, cbseFee: 3000, icseFee: 3200, isPerSubject: true, timingText: '1.5 - 2 hr' },
+  { gradeLabel: '12th Class', classNumber: 12, cbseFee: 3000, icseFee: 3200, isPerSubject: true, timingText: '1.5 - 2 hr' },
 ];
 
 /**
@@ -86,14 +90,14 @@ export function calculateHomeTutorFee(
 }
 
 /**
- * Extracts class number (1-10) from text string like "3rd Class", "Class 5", "1st to 6th Standard"
+ * Extracts class number (1-12) from text string like "3rd Class", "Class 5", "11th Class", "12th Standard"
  */
 export function parseClassNumber(text: string): number {
   if (!text) return 1;
   const match = text.match(/(\d+)/);
   if (match) {
     const num = parseInt(match[1], 10);
-    if (num >= 1 && num <= 10) return num;
+    if (num >= 1 && num <= 12) return num;
   }
   return 1;
 }

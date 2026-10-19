@@ -1491,6 +1491,63 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
               )}
             </div>
 
+            {/* 1b. Commission & Net Earnings Information Banner (Visible ONLY to Tutors) */}
+            <div className="bg-gradient-to-r from-amber-50 via-orange-50/70 to-amber-50 rounded-2xl border-2 border-amber-200/90 p-5 shadow-xs space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-xs">
+                    %
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-extrabold text-amber-950">
+                      Tutor Commission &amp; Net Take-Home Policy (20% Deducted • 80% Net Pay)
+                    </h4>
+                    <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block">
+                      Official Kumari Institute Faculty Remuneration Notice
+                    </span>
+                  </div>
+                </div>
+                <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-200/90 text-amber-900 border border-amber-300">
+                  Visible Only to Tutors
+                </span>
+              </div>
+
+              <div className="text-xs text-amber-900 leading-relaxed font-medium space-y-2 pt-0.5">
+                <p>
+                  A standard <strong>20% service commission</strong> is automatically deducted from gross tuition fees for student verification, lead allocation, timetable scheduling, and continuous academic administration.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-3 bg-white/80 rounded-xl border border-amber-200/90 text-center">
+                  <div className="p-2 rounded-lg bg-slate-50">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase block">Gross Tuition Fee</span>
+                    <span className="text-sm font-black text-slate-800 block mt-0.5">100% of Fee</span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-rose-50 border border-rose-100">
+                    <span className="text-[10px] font-bold text-rose-700 uppercase block">Automated Deduction</span>
+                    <span className="text-sm font-black text-rose-700 block mt-0.5">- 20% Service Fee</span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-100">
+                    <span className="text-[10px] font-bold text-emerald-700 uppercase block">Your Take-Home Pay</span>
+                    <span className="text-sm font-black text-emerald-700 block mt-0.5">★ 80% Net Earnings</span>
+                  </div>
+                </div>
+                <p className="text-[11px] text-amber-900/90">
+                  ★ <strong>The remaining 80% of your fee is automatically calculated and displayed in your Earnings &amp; Settlements section</strong> below, with direct withdrawal to your UPI or Bank Account after each 28-day tuition billing cycle.
+                </p>
+              </div>
+
+              <div className="pt-1 flex items-center justify-between flex-wrap gap-2">
+                <span className="text-[11px] text-amber-800 font-medium">Automatic 20% deduction applies to all doorstep tuitions &amp; batches.</span>
+                <button
+                  type="button"
+                  onClick={() => setIsSalaryModalOpen(true)}
+                  className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
+                >
+                  <Wallet className="w-3.5 h-3.5" />
+                  <span>View Net Earnings (80%)</span>
+                </button>
+              </div>
+            </div>
+
             {/* 2. Assigned Students Section (Deduplicated with real-time student details & attendance) */}
             <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
@@ -2180,6 +2237,26 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
 
               return (
                 <>
+                  {/* Tutor Commission Transparency Notice inside Earnings Dashboard */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50/80 border border-amber-200/90 text-amber-950 space-y-1.5 shadow-2xs">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-5 h-5 rounded-md bg-amber-500 text-white flex items-center justify-center font-black text-xs shrink-0">
+                          %
+                        </div>
+                        <h4 className="text-xs font-extrabold text-amber-950">
+                          Automated 20% Commission Deducted • 80% Net Pay Accrued
+                        </h4>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200/90 text-amber-900 border border-amber-300">
+                        Net Take-Home (80%)
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-amber-900 leading-relaxed font-medium">
+                      20% of the tuition fee has been automatically deducted as the institute administrative commission. All amounts below display your <strong>net 80% take-home earnings</strong>, eligible for withdrawal after each 28-day tuition period.
+                    </p>
+                  </div>
+
                   {/* Top Key Figures: Monthly Accrued, Pending Amount (under 30 days), and Current Amount (Available for withdrawal) */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     {/* 1. Monthly Accrued Earnings */}

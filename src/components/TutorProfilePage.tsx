@@ -57,6 +57,7 @@ export const TutorProfilePage: React.FC<TutorProfilePageProps> = ({
   };
 
   const activeFees = selectedBoard === 'CBSE' ? cbseFees : icseFees;
+  const isTutorViewer = currentUser?.role === 'teacher' || currentUser?.role === 'tutor' || Boolean(currentUser?.uid && currentUser?.uid === tutor.id);
 
   const handleShare = async () => {
     if (navigator.share) {
@@ -359,6 +360,28 @@ export const TutorProfilePage: React.FC<TutorProfilePageProps> = ({
             </div>
           </div>
 
+          {/* Tutor-Only Commission Banner */}
+          {isTutorViewer && (
+            <div className="p-3.5 rounded-2xl bg-amber-50/90 border border-amber-200/90 text-amber-950 space-y-1.5 shadow-2xs">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-md bg-amber-500 text-white flex items-center justify-center font-black text-xs shrink-0">
+                    %
+                  </span>
+                  <h4 className="text-xs font-bold text-amber-950">
+                    Tutor Remuneration &amp; Commission Policy (Visible Only to Tutors)
+                  </h4>
+                </div>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-200/80 text-amber-900 border border-amber-300">
+                  80% Net Take-Home Pay
+                </span>
+              </div>
+              <p className="text-[11px] text-amber-900 leading-relaxed font-medium">
+                20% of your tuition fees are deducted automatically as Kumari Institute service commission. The remaining <strong>80% net take-home earnings</strong> will be credited directly to your Earnings section upon student booking.
+              </p>
+            </div>
+          )}
+
           {/* Fee Cards Grid: 1st-7th all subjects, 8th-10th per subject, 11th-12th per subject */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
             {/* 1. Class 1st to 7th */}
@@ -378,18 +401,29 @@ export const TutorProfilePage: React.FC<TutorProfilePageProps> = ({
               <p className="text-[11px] text-slate-600 leading-tight">
                 Complete all-subjects home coaching curriculum for {selectedBoard}.
               </p>
-              <div className="pt-2 border-t border-slate-200/70 space-y-1">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-slate-500 font-medium">Tutor Earning (80%):</span>
-                  <span className="font-extrabold text-emerald-700">
-                    ₹{Math.round(activeFees.class1to7 * 0.8)}/mo
-                  </span>
+              {isTutorViewer ? (
+                <div className="pt-2 border-t border-slate-200/70 space-y-1">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-500 font-medium">Tutor Earning (80%):</span>
+                    <span className="font-extrabold text-emerald-700">
+                      ₹{Math.round(activeFees.class1to7 * 0.8)}/mo
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-slate-400">
+                    <span>Institute Commission (20%):</span>
+                    <span>₹{Math.round(activeFees.class1to7 * 0.2)}</span>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between text-[10px] text-slate-400">
-                  <span>Institute Commission (20%):</span>
-                  <span>₹{Math.round(activeFees.class1to7 * 0.2)}</span>
+              ) : (
+                <div className="pt-2 border-t border-slate-200/70 space-y-1 text-[11px]">
+                  <div className="flex items-center gap-1.5 text-emerald-700 font-bold">
+                    <span>✓ 1-on-1 Doorstep Home Tuition</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-slate-500">
+                    <span>✓ Verified Academic Faculty</span>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* 2. Class 8th to 10th */}
@@ -409,18 +443,29 @@ export const TutorProfilePage: React.FC<TutorProfilePageProps> = ({
               <p className="text-[11px] text-slate-600 leading-tight">
                 Subject-specific intensive coaching for {selectedBoard} board exams.
               </p>
-              <div className="pt-2 border-t border-slate-200/70 space-y-1">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-slate-500 font-medium">Tutor Earning (80%):</span>
-                  <span className="font-extrabold text-emerald-700">
-                    ₹{Math.round(activeFees.class8to10 * 0.8)}/sub
-                  </span>
+              {isTutorViewer ? (
+                <div className="pt-2 border-t border-slate-200/70 space-y-1">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-500 font-medium">Tutor Earning (80%):</span>
+                    <span className="font-extrabold text-emerald-700">
+                      ₹{Math.round(activeFees.class8to10 * 0.8)}/sub
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-slate-400">
+                    <span>Institute Commission (20%):</span>
+                    <span>₹{Math.round(activeFees.class8to10 * 0.2)}</span>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between text-[10px] text-slate-400">
-                  <span>Institute Commission (20%):</span>
-                  <span>₹{Math.round(activeFees.class8to10 * 0.2)}</span>
+              ) : (
+                <div className="pt-2 border-t border-slate-200/70 space-y-1 text-[11px]">
+                  <div className="flex items-center gap-1.5 text-emerald-700 font-bold">
+                    <span>✓ Focused Subject-Wise Mastery</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-slate-500">
+                    <span>✓ Board Syllabus Preparation</span>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* 3. Class 11th & 12th */}
@@ -440,18 +485,29 @@ export const TutorProfilePage: React.FC<TutorProfilePageProps> = ({
               <p className="text-[11px] text-slate-600 leading-tight">
                 Higher secondary subject coaching (+2 science, commerce, arts).
               </p>
-              <div className="pt-2 border-t border-slate-200/70 space-y-1">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-slate-500 font-medium">Tutor Earning (80%):</span>
-                  <span className="font-extrabold text-emerald-700">
-                    ₹{Math.round(activeFees.class11to12 * 0.8)}/sub
-                  </span>
+              {isTutorViewer ? (
+                <div className="pt-2 border-t border-slate-200/70 space-y-1">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-500 font-medium">Tutor Earning (80%):</span>
+                    <span className="font-extrabold text-emerald-700">
+                      ₹{Math.round(activeFees.class11to12 * 0.8)}/sub
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-slate-400">
+                    <span>Institute Commission (20%):</span>
+                    <span>₹{Math.round(activeFees.class11to12 * 0.2)}</span>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between text-[10px] text-slate-400">
-                  <span>Institute Commission (20%):</span>
-                  <span>₹{Math.round(activeFees.class11to12 * 0.2)}</span>
+              ) : (
+                <div className="pt-2 border-t border-slate-200/70 space-y-1 text-[11px]">
+                  <div className="flex items-center gap-1.5 text-emerald-700 font-bold">
+                    <span>✓ In-Depth +2 Concepts</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-slate-500">
+                    <span>✓ Competitive &amp; Board Guidance</span>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>

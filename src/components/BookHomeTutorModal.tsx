@@ -112,11 +112,56 @@ export const BookHomeTutorModal: React.FC<BookHomeTutorModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [bookingSuccessId, setBookingSuccessId] = useState<string | null>(null);
 
-  // Standardized Home Tutor Fee Calculation
+  // Standardized Home Tutor Fee Calculation based on Tutor's Board & Class schedule
   const classNumber = parseClassNumber(studentGrade);
   const feeCalculation = useMemo(() => {
-    return calculateHomeTutorFee(classNumber, board, selectedSubjects.length);
-  }, [classNumber, board, selectedSubjects.length]);
+    const bKey = board === 'ICSE' ? 'icse' : 'cbse';
+    const tutorCustom = tutor?.customFeeSchedule;
+
+    if (classNumber <= 7) {
+      // 1st to 7th Class: All Subjects Included Monthly Flat Fee
+      const customVal = Number(tutorCustom?.[bKey]?.class1to7) ||
+                        (board === 'CBSE' ? Number(tutor?.feeClass1to7) : Math.round((Number(tutor?.feeClass1to7) || 1500) * 1.15)) ||
+                        Number(tutor?.monthlyFee);
+      const fee = customVal || (board === 'ICSE' ? 1800 : 1500);
+      const timing = classNumber <= 2 ? '1 hr daily' : classNumber <= 4 ? '1.30 hr daily' : '2 hr daily';
+      return {
+        fee,
+        isPerSubject: false,
+        timing,
+        ratePerSubject: fee,
+        note: `All Subjects Package • ${board} Board`
+      };
+    } else if (classNumber <= 10) {
+      // 8th to 10th Class: Subject-Wise Monthly Fee
+      const customRate = Number(tutorCustom?.[bKey]?.class8to10) ||
+                         (board === 'CBSE' ? Number(tutor?.feeClass8to10) : Math.round((Number(tutor?.feeClass8to10) || 2000) * 1.1));
+      const perSubject = customRate || (board === 'ICSE' ? 2200 : 2000);
+      const count = Math.max(1, selectedSubjects.length);
+      const fee = perSubject * count;
+      return {
+        fee,
+        isPerSubject: true,
+        timing: '1.5 hr / session',
+        ratePerSubject: perSubject,
+        note: `₹${perSubject.toLocaleString('en-IN')}/subject × ${count} ${count === 1 ? 'subject' : 'subjects'} • ${board} Board`
+      };
+    } else {
+      // 11th & 12th Class: Higher Secondary Subject-Wise Monthly Fee
+      const customRate = Number(tutorCustom?.[bKey]?.class11to12) ||
+                         (board === 'CBSE' ? Number(tutor?.feeClass11to12) : Math.round((Number(tutor?.feeClass11to12) || 3000) * 1.1));
+      const perSubject = customRate || (board === 'ICSE' ? 3200 : 3000);
+      const count = Math.max(1, selectedSubjects.length);
+      const fee = perSubject * count;
+      return {
+        fee,
+        isPerSubject: true,
+        timing: '1.5 - 2 hr / session',
+        ratePerSubject: perSubject,
+        note: `₹${perSubject.toLocaleString('en-IN')}/subject × ${count} ${count === 1 ? 'subject' : 'subjects'} • ${board} Board`
+      };
+    }
+  }, [tutor, classNumber, board, selectedSubjects.length]);
 
   const effectiveMonthlyFee = feeCalculation.fee;
   const tutorPhoto = tutor?.avatar || (tutor as any)?.photoUrl || (tutor as any)?.image || '';
@@ -411,41 +456,51 @@ export const BookHomeTutorModal: React.FC<BookHomeTutorModalProps> = ({
                   onChange={(e) => setStudentGrade(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 cursor-pointer"
                 >
-                  <option value="1st Class">1st Class</option>
-                  <option value="2nd Class">2nd Class</option>
-                  <option value="3rd Class">3rd Class</option>
-                  <option value="4th Class">4th Class</option>
-                  <option value="5th Class">5th Class</option>
-                  <option value="6th Class">6th Class</option>
-                  <option value="7th Class">7th Class</option>
-                  <option value="8th Class">8th Class</option>
-                  <option value="9th Class">9th Class</option>
-                  <option value="10th Class">10th Class</option>
+                  <option value="1st Class">1st Class (All Subjects)</option>
+                  <option value="2nd Class">2nd Class (All Subjects)</option>
+                  <option value="3rd Class">3rd Class (All Subjects)</option>
+                  <option value="4th Class">4th Class (All Subjects)</option>
+                  <option value="5th Class">5th Class (All Subjects)</option>
+                  <option value="6th Class">6th Class (All Subjects)</option>
+                  <option value="7th Class">7th Class (All Subjects)</option>
+                  <option value="8th Class">8th Class (Subject-Wise)</option>
+                  <option value="9th Class">9th Class (Subject-Wise)</option>
+                  <option value="10th Class">10th Class (Subject-Wise)</option>
+                  <option value="11th Class">11th Class (Subject-Wise)</option>
+                  <option value="12th Class">12th Class (Subject-Wise)</option>
                 </select>
               </div>
             </div>
 
             {/* Live Calculated Fee Display (Board & Class specific) */}
-            <div className="p-3.5 rounded-2xl bg-gradient-to-r from-blue-50/90 to-indigo-50/90 border border-blue-200/90 flex items-center justify-between gap-3 shadow-2xs">
-              <div className="space-y-0.5">
-                <span className="text-[10px] font-black uppercase tracking-wider text-blue-900 block">
-                  Calculated Monthly Tuition Fee ({board} Board • {studentGrade})
-                </span>
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-xl font-black text-slate-900">
-                    ₹{effectiveMonthlyFee.toLocaleString('en-IN')}
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-50/95 via-indigo-50/90 to-blue-50/95 border-2 border-blue-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-blue-900 bg-blue-100/80 px-2 py-0.5 rounded-md">
+                    {board} Board • {studentGrade}
                   </span>
-                  <span className="text-xs font-semibold text-slate-500">
-                    {feeCalculation.isPerSubject ? '/ month total' : '/ month'}
+                  <span className="text-[11px] font-bold text-indigo-700">
+                    {classNumber <= 7 ? '✓ All Subjects Covered' : `₹${feeCalculation.ratePerSubject}/subject`}
                   </span>
                 </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl font-black text-slate-900">
+                    ₹{effectiveMonthlyFee.toLocaleString('en-IN')}
+                  </span>
+                  <span className="text-xs font-bold text-slate-600">
+                    {feeCalculation.isPerSubject ? `per month (${selectedSubjects.length} ${selectedSubjects.length === 1 ? 'subject' : 'subjects'})` : 'per month (all subjects)'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-600 font-medium">
+                  {feeCalculation.note}
+                </p>
               </div>
-              <div className="text-right shrink-0">
-                <span className="inline-block text-xs font-bold text-blue-700 bg-white px-2.5 py-1 rounded-lg border border-blue-200 shadow-2xs">
+              <div className="text-left sm:text-right shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-blue-200">
+                <span className="inline-block text-xs font-bold text-blue-700 bg-white px-3 py-1.5 rounded-xl border border-blue-200 shadow-2xs">
                   {feeCalculation.timing}
                 </span>
-                <span className="text-[10px] text-slate-500 font-medium block mt-0.5">
-                  Doorstep Session
+                <span className="text-[10px] text-slate-500 font-medium block mt-1">
+                  Verified Doorstep Home Tuition
                 </span>
               </div>
             </div>

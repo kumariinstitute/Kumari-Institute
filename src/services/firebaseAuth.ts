@@ -2400,24 +2400,30 @@ export function subscribeToAllTeachersForAdmin(onTeachersUpdate: (teachers: Tuto
       teacherType: data.teacherType === "both" ? "both" : "home",
       teachingHighlights: Array.isArray(data.teachingHighlights) ? data.teachingHighlights : [],
       educationDetails: data.educationDetails,
+      profileCompleted: Boolean(data.profileCompleted),
+      customFeeSchedule: data.customFeeSchedule,
+      feeClass1to7: data.feeClass1to7,
+      feeClass8to10: data.feeClass8to10,
+      feeClass11to12: data.feeClass11to12,
+      createdAt: data.createdAt || data.submittedAt || '',
       certificates: {
         tenth: {
           name: data.educationDetails?.tenth?.marksheetName || '10th_marksheet.jpg',
-          url: data.educationDetails?.tenth?.marksheetUrl || '',
+          url: data.educationDetails?.tenth?.marksheetUrl || data.tenthMarksheetUrl || data.tenthImage?.imgbbUrl || data.tenthImage?.dataUrl || '',
           score: data.educationDetails?.tenth?.score || '',
           year: data.educationDetails?.tenth?.year || '',
           board: data.educationDetails?.tenth?.board || 'Board of Secondary Education, Odisha'
         },
         twelfth: {
           name: data.educationDetails?.twelfth?.marksheetName || '12th_marksheet.jpg',
-          url: data.educationDetails?.twelfth?.marksheetUrl || '',
+          url: data.educationDetails?.twelfth?.marksheetUrl || data.twelfthMarksheetUrl || data.twelfthImage?.imgbbUrl || data.twelfthImage?.dataUrl || '',
           score: data.educationDetails?.twelfth?.score || '',
           year: data.educationDetails?.twelfth?.year || '',
           board: data.educationDetails?.twelfth?.board || 'Council of Higher Secondary Education, Odisha'
         },
         degree: {
           name: data.educationDetails?.degree?.marksheetName || 'degree_certificate.jpg',
-          url: data.educationDetails?.degree?.marksheetUrl || '',
+          url: data.educationDetails?.degree?.marksheetUrl || data.degreeCertificateUrl || data.degreeImage?.imgbbUrl || data.degreeImage?.dataUrl || '',
           score: data.educationDetails?.degree?.score || '',
           year: data.educationDetails?.degree?.year || '',
           course: data.educationDetails?.degree?.course || data.qualification || '',
@@ -2425,13 +2431,13 @@ export function subscribeToAllTeachersForAdmin(onTeachersUpdate: (teachers: Tuto
         },
         idProof: {
           name: 'aadhaar_card.jpg',
-          url: data.aadhaarDocUrl || '',
+          url: data.aadhaarDocUrl || data.aadhaarImage?.imgbbUrl || data.aadhaarImage?.dataUrl || data.certificates?.idProof?.url || '',
           docNumber: data.aadhaarNumber || '',
           type: 'Aadhaar Card (Govt. of India)'
         }
       },
       aadhaarNumber: data.aadhaarNumber,
-      aadhaarDocUrl: data.aadhaarDocUrl,
+      aadhaarDocUrl: data.aadhaarDocUrl || data.aadhaarImage?.imgbbUrl || data.aadhaarImage?.dataUrl || '',
       availableTimeSlots: Array.isArray(data.availableTimeSlots) ? data.availableTimeSlots : [],
       reviews: Array.isArray(data.reviews) ? data.reviews : []
     };

@@ -2360,6 +2360,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     ? '2. Parents Directory (Registered Parents)'
                     : activeTab === 'tutors_requests' || activeTab === 'tutors'
                     ? '3. Tutors Request Collection (Pending Verification)'
+                    : activeTab === 'unprofile_tutors'
+                    ? 'Un-Profile Updated Tutors (Registered Tutors Pending Profile Completion)'
                     : activeTab === 'tutors_directory' || activeTab === 'complete_tutors' || activeTab === 'assigned_tutors'
                     ? '4. Tutors Directory (Approved Tutors & Assigned Parents)'
                     : activeTab === 'received_fees'
@@ -2393,6 +2395,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   ? 'Overview of all genuine registered parents, student learning requirements, and home tutor allocations'
                   : activeTab === 'tutors_requests' || activeTab === 'tutors'
                   ? 'Registered tutors undergoing profile and certificate verification; approve genuine teachers to add to Tutors Directory'
+                  : activeTab === 'unprofile_tutors'
+                  ? 'Registered tutors who have not yet submitted their full profile and certificates. Once they update their profile, they will automatically move to Tutors Verification.'
                   : activeTab === 'tutors_directory' || activeTab === 'complete_tutors' || activeTab === 'assigned_tutors'
                   ? 'Approved home tutors directory with complete credentials, subjects handled, and connected parent families'
                   : activeTab === 'received_fees'
@@ -3127,6 +3131,222 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         )}
 
         {/* =========================================================================
+            TAB: UN-PROFILE UPDATED TUTORS (Registered Tutors Pending Profile Completion)
+           ========================================================================= */}
+        {activeTab === 'unprofile_tutors' && (
+          <div className="space-y-6 animate-in fade-in duration-200">
+            {/* Header Description & Metrics Banner */}
+            <div className="bg-slate-800/80 rounded-3xl p-6 border border-slate-700/80 space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xl font-bold text-white">Un-Profile Updated Tutors</h2>
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                      {unprofileUpdatedTutors.length} Pending Completion
+                    </span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-slate-400 max-w-3xl">
+                    All tutors who registered via Google Sign-In or Email but have not yet filled their complete teaching profile (subjects, class-wise fees, board options, and certificate marksheets) are listed here. Once a tutor logs in and completes their profile, they will automatically move to the <strong>Tutor Verification (Tutors Request)</strong> section for your approval and be removed from this section.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('tutors_requests');
+                      setTutorFilter('pending');
+                    }}
+                    className="px-4 py-2.5 rounded-2xl bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer"
+                  >
+                    <UserPlus className="w-4 h-4 text-amber-400" />
+                    <span>Go to Tutor Requests ({pendingTutorsCount})</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Search & Action Bar */}
+              <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t border-slate-700/60">
+                <div className="relative flex-1 max-w-md">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={unprofileSearch}
+                    onChange={(e) => setUnprofileSearch(e.target.value)}
+                    placeholder="Search by name, email, or phone..."
+                    className="w-full pl-9 pr-4 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                  />
+                  {unprofileSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setUnprofileSearch('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs font-bold"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const link = `${window.location.origin}/?openCompleteProfile=true`;
+                    navigator.clipboard.writeText(link);
+                    showToast('success', '✓ Copied Tutor Complete-Profile link to clipboard!');
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-700 text-amber-300 border border-amber-500/30 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-sm"
+                  title="Copy the public profile completion URL to send to registered tutors"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Copy Complete Profile Link</span>
+                </button>
+              </div>
+            </div>
+
+            {/* List / Grid of Unprofiled Tutors */}
+            {(() => {
+              const filteredList = unprofileUpdatedTutors.filter((t) => {
+                if (!unprofileSearch.trim()) return true;
+                const q = unprofileSearch.toLowerCase().trim();
+                return (
+                  t.name?.toLowerCase().includes(q) ||
+                  t.email?.toLowerCase().includes(q) ||
+                  (t.phone && t.phone.toLowerCase().includes(q))
+                );
+              });
+
+              if (filteredList.length === 0) {
+                return (
+                  <div className="bg-slate-800/60 rounded-3xl p-12 text-center border border-slate-700/60 space-y-3">
+                    <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 text-emerald-400 mx-auto flex items-center justify-center border border-emerald-500/20">
+                      <CheckCircle2 className="w-7 h-7" />
+                    </div>
+                    <h3 className="text-lg font-bold text-white">
+                      {unprofileSearch ? 'No matching tutors found' : 'No Incomplete Tutor Profiles'}
+                    </h3>
+                    <p className="text-xs text-slate-400 max-w-md mx-auto">
+                      {unprofileSearch
+                        ? 'Try adjusting your search keywords.'
+                        : 'All registered tutors in the system have submitted their full profile and certificates. They are currently in the Tutors Request verification section or Tutors Directory.'}
+                    </p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {filteredList.map((tutor) => (
+                    <div
+                      key={tutor.id}
+                      className="bg-slate-800 rounded-3xl p-5 border border-amber-500/30 flex flex-col justify-between transition-all hover:border-amber-500/60 shadow-lg shadow-black/20"
+                    >
+                      <div className="space-y-4">
+                        {/* Tutor Header */}
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            {tutor.avatar ? (
+                              <img
+                                src={tutor.avatar}
+                                alt={tutor.name}
+                                className="w-12 h-12 rounded-2xl object-cover border-2 border-slate-700 shrink-0"
+                              />
+                            ) : (
+                              <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-300 font-bold flex items-center justify-center text-lg border border-amber-500/30 shrink-0">
+                                {tutor.name?.charAt(0) || 'T'}
+                              </div>
+                            )}
+                            <div>
+                              <h3 className="font-bold text-white text-base">{tutor.name || 'New Tutor'}</h3>
+                              <p className="text-xs text-amber-400 font-semibold">
+                                {tutor.qualification || 'Educator (Pending Details)'}
+                              </p>
+                              <span className="text-[10px] text-slate-400">
+                                Registered: {tutor.createdAt ? new Date(tutor.createdAt).toLocaleDateString() : 'Recent'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0">
+                            Profile Incomplete
+                          </span>
+                        </div>
+
+                        {/* Contact details */}
+                        <div className="space-y-1.5 text-xs text-slate-300 bg-slate-900/60 p-3 rounded-2xl border border-slate-800">
+                          {tutor.email && (
+                            <div className="flex items-center gap-2 truncate">
+                              <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <a href={`mailto:${tutor.email}`} className="truncate hover:text-amber-400">
+                                {tutor.email}
+                              </a>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-2">
+                            <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span>{tutor.phone || 'Phone not yet provided'}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span>{tutor.locationArea || 'Rayagada'}</span>
+                          </div>
+                        </div>
+
+                        {/* Missing Requirements Checklist */}
+                        <div className="space-y-1.5 bg-amber-950/20 p-3 rounded-2xl border border-amber-500/20 text-xs">
+                          <span className="font-bold text-amber-300 block text-[11px] uppercase tracking-wider">
+                            Pending Profile Items:
+                          </span>
+                          <ul className="space-y-1 text-[11px] text-slate-300">
+                            <li className="flex items-center gap-1.5">
+                              <span className="text-amber-400 font-bold">✕</span>
+                              <span>Board Tuition Fees (CBSE &amp; ICSE Class 1-12)</span>
+                            </li>
+                            <li className="flex items-center gap-1.5">
+                              <span className="text-amber-400 font-bold">✕</span>
+                              <span>Mark sheet Uploads (10th, 12th, Degree)</span>
+                            </li>
+                            <li className="flex items-center gap-1.5">
+                              <span className="text-amber-400 font-bold">✕</span>
+                              <span>Government Aadhaar Card ID verification</span>
+                            </li>
+                          </ul>
+                        </div>
+                      </div>
+
+                      {/* Footer Actions */}
+                      <div className="pt-4 border-t border-slate-700/60 flex items-center justify-between gap-2 mt-4">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const link = `${window.location.origin}/?openCompleteProfile=true`;
+                            navigator.clipboard.writeText(link);
+                            showToast('success', `Copied profile completion link for ${tutor.name}`);
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-700 text-amber-300 text-xs font-bold border border-amber-500/30 flex items-center gap-1 transition-colors cursor-pointer"
+                        >
+                          <Copy className="w-3 h-3" />
+                          <span>Copy Link</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteTutor(tutor)}
+                          className="px-3 py-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-500/30 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                          title="Remove incomplete/test account"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Remove</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+        {/* =========================================================================
             TAB 4: TUTORS DIRECTORY (Approved Tutors & Connected Assigned Parents)
            ========================================================================= */}
         {(activeTab === 'tutors_directory' || activeTab === 'complete_tutors' || activeTab === 'assigned_tutors') && (
@@ -3694,6 +3914,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                         <Phone className="w-3 h-3 text-amber-400" />
                                         <span>Call Parent</span>
                                       </a>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenChangeTutorForParent(parent)}
+                                        className="px-3 py-1.5 rounded-xl bg-slate-950 hover:bg-slate-800 text-amber-300 text-xs font-bold border border-amber-500/30 transition-colors cursor-pointer flex items-center gap-1"
+                                        title="Change or reassign this parent to a different tutor"
+                                      >
+                                        <RefreshCw className="w-3 h-3" />
+                                        <span>Change Tutor</span>
+                                      </button>
                                     </div>
                                   </div>
                                 ))
@@ -5674,15 +5903,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                       Active home tuition in progress
                                     </span>
                                   </div>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setActiveTab('assigned_tutors');
-                                    }}
-                                    className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold cursor-pointer transition-colors shrink-0"
-                                  >
-                                    View in Assigned Tab →
-                                  </button>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenChangeTutorForParent(parent)}
+                                      className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold cursor-pointer transition-colors flex items-center gap-1.5"
+                                      title="Change the assigned tutor for this parent"
+                                    >
+                                      <RefreshCw className="w-3.5 h-3.5" />
+                                      <span>Change Tutor</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setActiveTab('assigned_tutors');
+                                      }}
+                                      className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold cursor-pointer transition-colors shrink-0"
+                                    >
+                                      View in Assigned Tab →
+                                    </button>
+                                  </div>
                                 </div>
                               ) : (
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-blue-950/20 p-3 rounded-2xl border border-blue-500/20 text-xs">
@@ -6338,188 +6578,359 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
               )}
 
-              {/* 1. Official Document Previews (10th, 12th, Degree, Aadhaar) */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                  <h4 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-amber-400" />
-                    <span>Uploaded Certificates &amp; ID Proofs</span>
-                  </h4>
-                  <span className="text-xs text-slate-400">Click any document to inspect full-size</span>
-                </div>
+              {/* Document and Fee calculations */}
+              {(() => {
+                const tenthDocUrl =
+                  selectedTutorForReview.certificates?.tenth?.url ||
+                  (selectedTutorForReview.educationDetails as any)?.tenth?.marksheetUrl ||
+                  (selectedTutorForReview as any)?.tenthMarksheetUrl ||
+                  (selectedTutorForReview as any)?.tenthImage?.imgbbUrl ||
+                  (selectedTutorForReview as any)?.tenthImage?.dataUrl ||
+                  '';
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {/* 10th Class Marksheet */}
-                  <div className="bg-slate-950 rounded-2xl p-3 border border-slate-800 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-amber-400">10th Marksheet</span>
-                      <span className="text-[10px] text-emerald-400 font-mono">
-                        {selectedTutorForReview.certificates?.tenth?.score || '91.4%'}
-                      </span>
-                    </div>
+                const twelfthDocUrl =
+                  selectedTutorForReview.certificates?.twelfth?.url ||
+                  (selectedTutorForReview.educationDetails as any)?.twelfth?.marksheetUrl ||
+                  (selectedTutorForReview as any)?.twelfthMarksheetUrl ||
+                  (selectedTutorForReview as any)?.twelfthImage?.imgbbUrl ||
+                  (selectedTutorForReview as any)?.twelfthImage?.dataUrl ||
+                  '';
 
-                    <div
-                      onClick={() =>
-                        setPreviewCertDoc({
-                          title: '10th Class High School Certificate & Marksheet',
-                          url: selectedTutorForReview.certificates?.tenth?.url || '',
-                          details: `Board: ${selectedTutorForReview.certificates?.tenth?.board || 'BSE Odisha'} • Year: ${selectedTutorForReview.certificates?.tenth?.year || '2016'}`
-                        })
-                      }
-                      className="aspect-3/4 rounded-xl overflow-hidden bg-slate-900 border border-slate-700/80 cursor-pointer relative group flex items-center justify-center p-1"
-                    >
-                      {selectedTutorForReview.certificates?.tenth?.url ? (
-                        <img
-                          src={selectedTutorForReview.certificates.tenth.url}
-                          alt="10th Marksheet"
-                          className="w-full h-full object-contain group-hover:scale-105 transition-transform"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 gap-1">
-                          <FileText className="w-6 h-6 text-slate-600" />
-                          <span className="text-[10px]">Document Pending</span>
+                const degreeDocUrl =
+                  selectedTutorForReview.certificates?.degree?.url ||
+                  (selectedTutorForReview.educationDetails as any)?.degree?.marksheetUrl ||
+                  (selectedTutorForReview as any)?.degreeCertificateUrl ||
+                  (selectedTutorForReview as any)?.degreeImage?.imgbbUrl ||
+                  (selectedTutorForReview as any)?.degreeImage?.dataUrl ||
+                  '';
+
+                const aadhaarDocUrl =
+                  selectedTutorForReview.certificates?.idProof?.url ||
+                  selectedTutorForReview.aadhaarDocUrl ||
+                  (selectedTutorForReview as any)?.aadhaarImage?.imgbbUrl ||
+                  (selectedTutorForReview as any)?.aadhaarImage?.dataUrl ||
+                  (selectedTutorForReview as any)?.aadhaarImage ||
+                  (selectedTutorForReview as any)?.aadhaarCardUrl ||
+                  '';
+
+                const avatarPhotoUrl =
+                  selectedTutorForReview.avatar ||
+                  (selectedTutorForReview as any)?.photoUrl ||
+                  (selectedTutorForReview as any)?.profilePhoto?.imgbbUrl ||
+                  '';
+
+                const cbse1to7 = selectedTutorForReview.customFeeSchedule?.cbse?.class1to7 || selectedTutorForReview.feeClass1to7 || 1500;
+                const cbse8to10 = selectedTutorForReview.customFeeSchedule?.cbse?.class8to10 || selectedTutorForReview.feeClass8to10 || 2000;
+                const cbse11to12 = selectedTutorForReview.customFeeSchedule?.cbse?.class11to12 || selectedTutorForReview.feeClass11to12 || 3000;
+
+                const icse1to7 = selectedTutorForReview.customFeeSchedule?.icse?.class1to7 || 1800;
+                const icse8to10 = selectedTutorForReview.customFeeSchedule?.icse?.class8to10 || 2200;
+                const icse11to12 = selectedTutorForReview.customFeeSchedule?.icse?.class11to12 || 3200;
+
+                return (
+                  <>
+                    {/* 1. Official Document Previews (Photo, 10th, 12th, Degree, Aadhaar) */}
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                        <h4 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-amber-400" />
+                          <span>Uploaded Documents &amp; Identity Proofs</span>
+                        </h4>
+                        <span className="text-xs text-slate-400">Click any document to inspect full-size image</span>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+                        {/* Profile Photo */}
+                        <div className="bg-slate-950 rounded-2xl p-3 border border-slate-800 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-indigo-400">Profile Photo</span>
+                            <span className="text-[10px] text-slate-400">Passport</span>
+                          </div>
+
+                          <div
+                            onClick={() =>
+                              avatarPhotoUrl &&
+                              setPreviewCertDoc({
+                                title: `Profile Photo - ${selectedTutorForReview.name}`,
+                                url: avatarPhotoUrl,
+                                details: `${selectedTutorForReview.qualification} • ${selectedTutorForReview.locationArea || 'Rayagada'}`
+                              })
+                            }
+                            className="aspect-3/4 rounded-xl overflow-hidden bg-slate-900 border border-slate-700/80 cursor-pointer relative group flex items-center justify-center p-1"
+                          >
+                            {avatarPhotoUrl ? (
+                              <img
+                                src={avatarPhotoUrl}
+                                alt="Profile Avatar"
+                                className="w-full h-full object-cover rounded-lg group-hover:scale-105 transition-transform"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 gap-1">
+                                <Users className="w-6 h-6 text-slate-600" />
+                                <span className="text-[10px]">Photo Pending</span>
+                              </div>
+                            )}
+                            {avatarPhotoUrl && (
+                              <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity rounded-lg">
+                                <span className="px-2 py-1 bg-indigo-500 text-white text-[10px] font-black rounded-lg flex items-center gap-1 shadow-md">
+                                  <ZoomIn className="w-3 h-3" />
+                                  <span>Inspect</span>
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-400 truncate">
+                            {selectedTutorForReview.name}
+                          </p>
                         </div>
-                      )}
-                      <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                        <span className="px-2 py-1 bg-amber-500 text-slate-950 text-[10px] font-black rounded-lg flex items-center gap-1 shadow-md">
-                          <ZoomIn className="w-3 h-3" />
-                          <span>Inspect</span>
-                        </span>
+
+                        {/* 10th Class Marksheet */}
+                        <div className="bg-slate-950 rounded-2xl p-3 border border-slate-800 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-amber-400">10th Marksheet</span>
+                            <span className="text-[10px] text-emerald-400 font-mono">
+                              {selectedTutorForReview.certificates?.tenth?.score || 'Marksheet'}
+                            </span>
+                          </div>
+
+                          <div
+                            onClick={() =>
+                              tenthDocUrl &&
+                              setPreviewCertDoc({
+                                title: '10th Class High School Certificate & Marksheet',
+                                url: tenthDocUrl,
+                                details: `Board: ${selectedTutorForReview.certificates?.tenth?.board || 'Board of Secondary Education'} • Year: ${selectedTutorForReview.certificates?.tenth?.year || 'Passed'}`
+                              })
+                            }
+                            className="aspect-3/4 rounded-xl overflow-hidden bg-slate-900 border border-slate-700/80 cursor-pointer relative group flex items-center justify-center p-1"
+                          >
+                            {tenthDocUrl ? (
+                              <img
+                                src={tenthDocUrl}
+                                alt="10th Marksheet"
+                                className="w-full h-full object-contain group-hover:scale-105 transition-transform"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 gap-1">
+                                <FileText className="w-6 h-6 text-slate-600" />
+                                <span className="text-[10px]">Document Pending</span>
+                              </div>
+                            )}
+                            {tenthDocUrl && (
+                              <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                <span className="px-2 py-1 bg-amber-500 text-slate-950 text-[10px] font-black rounded-lg flex items-center gap-1 shadow-md">
+                                  <ZoomIn className="w-3 h-3" />
+                                  <span>Inspect</span>
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-400 truncate">
+                            {selectedTutorForReview.certificates?.tenth?.board || '10th Secondary'}
+                          </p>
+                        </div>
+
+                        {/* 12th Class Marksheet */}
+                        <div className="bg-slate-950 rounded-2xl p-3 border border-slate-800 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-amber-400">+2 / 12th Marksheet</span>
+                            <span className="text-[10px] text-emerald-400 font-mono">
+                              {selectedTutorForReview.certificates?.twelfth?.score || 'Marksheet'}
+                            </span>
+                          </div>
+
+                          <div
+                            onClick={() =>
+                              twelfthDocUrl &&
+                              setPreviewCertDoc({
+                                title: '+2 / 12th Higher Secondary Examination Marksheet',
+                                url: twelfthDocUrl,
+                                details: `Council: ${selectedTutorForReview.certificates?.twelfth?.board || 'CHSE / CBSE'} • Year: ${selectedTutorForReview.certificates?.twelfth?.year || 'Passed'}`
+                              })
+                            }
+                            className="aspect-3/4 rounded-xl overflow-hidden bg-slate-900 border border-slate-700/80 cursor-pointer relative group flex items-center justify-center p-1"
+                          >
+                            {twelfthDocUrl ? (
+                              <img
+                                src={twelfthDocUrl}
+                                alt="12th Marksheet"
+                                className="w-full h-full object-contain group-hover:scale-105 transition-transform"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 gap-1">
+                                <FileText className="w-6 h-6 text-slate-600" />
+                                <span className="text-[10px]">Document Pending</span>
+                              </div>
+                            )}
+                            {twelfthDocUrl && (
+                              <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                <span className="px-2 py-1 bg-amber-500 text-slate-950 text-[10px] font-black rounded-lg flex items-center gap-1 shadow-md">
+                                  <ZoomIn className="w-3 h-3" />
+                                  <span>Inspect</span>
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-400 truncate">
+                            {selectedTutorForReview.certificates?.twelfth?.board || '+2 Secondary'}
+                          </p>
+                        </div>
+
+                        {/* Degree Certificate */}
+                        <div className="bg-slate-950 rounded-2xl p-3 border border-slate-800 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-amber-400">Degree Certificate</span>
+                            <span className="text-[10px] text-emerald-400 font-mono">
+                              {selectedTutorForReview.certificates?.degree?.score || 'Graduation'}
+                            </span>
+                          </div>
+
+                          <div
+                            onClick={() =>
+                              degreeDocUrl &&
+                              setPreviewCertDoc({
+                                title: 'Degree & Graduation Certificate',
+                                url: degreeDocUrl,
+                                details: `University: ${selectedTutorForReview.certificates?.degree?.university || 'University'} • Degree: ${selectedTutorForReview.qualification}`
+                              })
+                            }
+                            className="aspect-3/4 rounded-xl overflow-hidden bg-slate-900 border border-slate-700/80 cursor-pointer relative group flex items-center justify-center p-1"
+                          >
+                            {degreeDocUrl ? (
+                              <img
+                                src={degreeDocUrl}
+                                alt="Degree Certificate"
+                                className="w-full h-full object-contain group-hover:scale-105 transition-transform"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 gap-1">
+                                <FileText className="w-6 h-6 text-slate-600" />
+                                <span className="text-[10px]">Document Pending</span>
+                              </div>
+                            )}
+                            {degreeDocUrl && (
+                              <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                <span className="px-2 py-1 bg-amber-500 text-slate-950 text-[10px] font-black rounded-lg flex items-center gap-1 shadow-md">
+                                  <ZoomIn className="w-3 h-3" />
+                                  <span>Inspect</span>
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-400 truncate">
+                            {selectedTutorForReview.certificates?.degree?.university || selectedTutorForReview.qualification}
+                          </p>
+                        </div>
+
+                        {/* Aadhaar Card ID */}
+                        <div className="bg-slate-950 rounded-2xl p-3 border border-slate-800 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-blue-400">Aadhaar Card</span>
+                            <span className="text-[10px] text-slate-400">Govt ID</span>
+                          </div>
+
+                          <div
+                            onClick={() =>
+                              aadhaarDocUrl &&
+                              setPreviewCertDoc({
+                                title: 'Government Identity Verification (Aadhaar Card)',
+                                url: aadhaarDocUrl,
+                                details: `Aadhaar Number: ${selectedTutorForReview.aadhaarNumber || 'Provided'} • Location: ${selectedTutorForReview.locationArea || 'Rayagada'}`
+                              })
+                            }
+                            className="aspect-3/4 rounded-xl overflow-hidden bg-slate-900 border border-slate-700/80 cursor-pointer relative group flex items-center justify-center p-1"
+                          >
+                            {aadhaarDocUrl ? (
+                              <img
+                                src={aadhaarDocUrl}
+                                alt="Aadhaar Card"
+                                className="w-full h-full object-contain group-hover:scale-105 transition-transform"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 gap-1">
+                                <FileText className="w-6 h-6 text-slate-600" />
+                                <span className="text-[10px]">Document Pending</span>
+                              </div>
+                            )}
+                            {aadhaarDocUrl && (
+                              <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                <span className="px-2 py-1 bg-blue-500 text-white text-[10px] font-black rounded-lg flex items-center gap-1 shadow-md">
+                                  <ZoomIn className="w-3 h-3" />
+                                  <span>Inspect</span>
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-400 font-mono truncate">
+                            UID: {selectedTutorForReview.aadhaarNumber || 'Verified ID'}
+                          </p>
+                        </div>
                       </div>
                     </div>
-                    <p className="text-[10px] text-slate-400 truncate">
-                      {selectedTutorForReview.certificates?.tenth?.board || 'BSE Odisha'}
-                    </p>
-                  </div>
 
-                  {/* 12th Class Marksheet */}
-                  <div className="bg-slate-950 rounded-2xl p-3 border border-slate-800 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-amber-400">+2 / 12th Science</span>
-                      <span className="text-[10px] text-emerald-400 font-mono">
-                        {selectedTutorForReview.certificates?.twelfth?.score || '88.6%'}
-                      </span>
-                    </div>
-
-                    <div
-                      onClick={() =>
-                        setPreviewCertDoc({
-                          title: '+2 Higher Secondary Examination Marksheet',
-                          url: selectedTutorForReview.certificates?.twelfth?.url || '',
-                          details: `Council: ${selectedTutorForReview.certificates?.twelfth?.board || 'CHSE Odisha'} • Year: ${selectedTutorForReview.certificates?.twelfth?.year || '2018'}`
-                        })
-                      }
-                      className="aspect-3/4 rounded-xl overflow-hidden bg-slate-900 border border-slate-700/80 cursor-pointer relative group flex items-center justify-center p-1"
-                    >
-                      {selectedTutorForReview.certificates?.twelfth?.url ? (
-                        <img
-                          src={selectedTutorForReview.certificates.twelfth.url}
-                          alt="12th Marksheet"
-                          className="w-full h-full object-contain group-hover:scale-105 transition-transform"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 gap-1">
-                          <FileText className="w-6 h-6 text-slate-600" />
-                          <span className="text-[10px]">Document Pending</span>
-                        </div>
-                      )}
-                      <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                        <span className="px-2 py-1 bg-amber-500 text-slate-950 text-[10px] font-black rounded-lg flex items-center gap-1 shadow-md">
-                          <ZoomIn className="w-3 h-3" />
-                          <span>Inspect</span>
+                    {/* Board-Wise Tuition Fee Structure Display */}
+                    <div className="bg-slate-950 rounded-2xl p-4 border border-slate-800 space-y-3">
+                      <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                        <h5 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                          <IndianRupee className="w-4 h-4 text-emerald-400" />
+                          <span>Monthly Tuition Fees Charged (Board &amp; Class-Wise)</span>
+                        </h5>
+                        <span className="text-[11px] text-amber-300 font-bold">
+                          {selectedTutorForReview.experienceYears === 0 || String(selectedTutorForReview.experienceText).toLowerCase().includes('fresher')
+                            ? 'Experience: Fresher'
+                            : `Experience: ${selectedTutorForReview.experienceYears} Years`}
                         </span>
                       </div>
-                    </div>
-                    <p className="text-[10px] text-slate-400 truncate">
-                      {selectedTutorForReview.certificates?.twelfth?.board || 'CHSE Odisha'}
-                    </p>
-                  </div>
 
-                  {/* Degree Certificate */}
-                  <div className="bg-slate-950 rounded-2xl p-3 border border-slate-800 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-amber-400">Degree Certificate</span>
-                      <span className="text-[10px] text-emerald-400 font-mono">
-                        {selectedTutorForReview.certificates?.degree?.score || '85.0%'}
-                      </span>
-                    </div>
-
-                    <div
-                      onClick={() =>
-                        setPreviewCertDoc({
-                          title: 'Degree & Graduation Certificate',
-                          url: selectedTutorForReview.certificates?.degree?.url || '',
-                          details: `University: ${selectedTutorForReview.certificates?.degree?.university || 'Berhampur University'} • Degree: ${selectedTutorForReview.qualification}`
-                        })
-                      }
-                      className="aspect-3/4 rounded-xl overflow-hidden bg-slate-900 border border-slate-700/80 cursor-pointer relative group flex items-center justify-center p-1"
-                    >
-                      {selectedTutorForReview.certificates?.degree?.url ? (
-                        <img
-                          src={selectedTutorForReview.certificates.degree.url}
-                          alt="Degree Certificate"
-                          className="w-full h-full object-contain group-hover:scale-105 transition-transform"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 gap-1">
-                          <FileText className="w-6 h-6 text-slate-600" />
-                          <span className="text-[10px]">Document Pending</span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        {/* CBSE Schedule */}
+                        <div className="p-3 rounded-xl bg-slate-900 border border-blue-500/30 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-black text-blue-400">CBSE Board Fees</span>
+                            <span className="text-[10px] font-bold text-slate-400 bg-slate-800 px-2 py-0.5 rounded">CBSE</span>
+                          </div>
+                          <div className="space-y-1.5 text-xs">
+                            <div className="flex justify-between items-center text-slate-300">
+                              <span>1st to 7th Class <span className="text-[10px] text-slate-400">(All Subjects):</span></span>
+                              <span className="font-bold text-emerald-400">₹{cbse1to7}/mo</span>
+                            </div>
+                            <div className="flex justify-between items-center text-slate-300">
+                              <span>8th to 10th Class <span className="text-[10px] text-slate-400">(Per Subject):</span></span>
+                              <span className="font-bold text-emerald-400">₹{cbse8to10}/mo</span>
+                            </div>
+                            <div className="flex justify-between items-center text-slate-300">
+                              <span>11th &amp; 12th Class <span className="text-[10px] text-slate-400">(Per Subject):</span></span>
+                              <span className="font-bold text-emerald-400">₹{cbse11to12}/mo</span>
+                            </div>
+                          </div>
                         </div>
-                      )}
-                      <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                        <span className="px-2 py-1 bg-amber-500 text-slate-950 text-[10px] font-black rounded-lg flex items-center gap-1 shadow-md">
-                          <ZoomIn className="w-3 h-3" />
-                          <span>Inspect</span>
-                        </span>
+
+                        {/* ICSE Schedule */}
+                        <div className="p-3 rounded-xl bg-slate-900 border border-purple-500/30 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-black text-purple-400">ICSE Board Fees</span>
+                            <span className="text-[10px] font-bold text-slate-400 bg-slate-800 px-2 py-0.5 rounded">ICSE</span>
+                          </div>
+                          <div className="space-y-1.5 text-xs">
+                            <div className="flex justify-between items-center text-slate-300">
+                              <span>1st to 7th Class <span className="text-[10px] text-slate-400">(All Subjects):</span></span>
+                              <span className="font-bold text-emerald-400">₹{icse1to7}/mo</span>
+                            </div>
+                            <div className="flex justify-between items-center text-slate-300">
+                              <span>8th to 10th Class <span className="text-[10px] text-slate-400">(Per Subject):</span></span>
+                              <span className="font-bold text-emerald-400">₹{icse8to10}/mo</span>
+                            </div>
+                            <div className="flex justify-between items-center text-slate-300">
+                              <span>11th &amp; 12th Class <span className="text-[10px] text-slate-400">(Per Subject):</span></span>
+                              <span className="font-bold text-emerald-400">₹{icse11to12}/mo</span>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    <p className="text-[10px] text-slate-400 truncate">
-                      {selectedTutorForReview.certificates?.degree?.university || 'University Degree'}
-                    </p>
-                  </div>
-
-                  {/* Aadhaar Card ID */}
-                  <div className="bg-slate-950 rounded-2xl p-3 border border-slate-800 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-blue-400">Aadhaar ID Proof</span>
-                      <span className="text-[10px] text-slate-400">Govt ID</span>
-                    </div>
-
-                    <div
-                      onClick={() =>
-                        setPreviewCertDoc({
-                          title: 'Government Identity Verification (Aadhaar Card)',
-                          url: selectedTutorForReview.certificates?.idProof?.url || '',
-                          details: `Aadhaar Number: ${selectedTutorForReview.aadhaarNumber || '8492 1048 3921'} • Address: ${selectedTutorForReview.locationArea || 'Rayagada'}`
-                        })
-                      }
-                      className="aspect-3/4 rounded-xl overflow-hidden bg-slate-900 border border-slate-700/80 cursor-pointer relative group flex items-center justify-center p-1"
-                    >
-                      {selectedTutorForReview.certificates?.idProof?.url ? (
-                        <img
-                          src={selectedTutorForReview.certificates.idProof.url}
-                          alt="Aadhaar Card"
-                          className="w-full h-full object-contain group-hover:scale-105 transition-transform"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 gap-1">
-                          <FileText className="w-6 h-6 text-slate-600" />
-                          <span className="text-[10px]">Document Pending</span>
-                        </div>
-                      )}
-                      <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                        <span className="px-2 py-1 bg-blue-500 text-white text-[10px] font-black rounded-lg flex items-center gap-1 shadow-md">
-                          <ZoomIn className="w-3 h-3" />
-                          <span>Inspect</span>
-                        </span>
-                      </div>
-                    </div>
-                    <p className="text-[10px] text-slate-400 font-mono truncate">
-                      UID: {selectedTutorForReview.aadhaarNumber || '8492 1048 3921'}
-                    </p>
-                  </div>
-                </div>
-              </div>
+                  </>
+                );
+              })()}
 
               {/* 2. Personal & Teaching Dossier */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -6943,9 +7354,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <UserPlus className="w-5 h-5 text-indigo-400" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-white text-base">Assign Home Tutor</h3>
+                  <h3 className="font-bold text-white text-base">
+                    {directAssignParent.assignedTutor || directAssignParent.assignedEducator?.name
+                      ? 'Change / Reassign Home Tutor'
+                      : 'Assign Home Tutor'}
+                  </h3>
                   <p className="text-xs text-slate-400">
-                    Pairing educator for <span className="text-white font-semibold">{directAssignParent.name}</span>
+                    {directAssignParent.assignedTutor || directAssignParent.assignedEducator?.name
+                      ? `Reassigning educator for ${directAssignParent.name} (Tutors can be changed as needed)`
+                      : `Pairing educator for ${directAssignParent.name}`}
                   </p>
                 </div>
               </div>
@@ -7082,7 +7499,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-md shadow-indigo-600/30"
               >
                 <UserCheck className="w-3.5 h-3.5" />
-                <span>{isDirectAssigning ? 'Assigning Tutor...' : 'Confirm Assignment'}</span>
+                <span>
+                  {isDirectAssigning
+                    ? 'Updating Tutor...'
+                    : directAssignParent.assignedTutor || directAssignParent.assignedEducator?.name
+                    ? 'Confirm Tutor Reassignment'
+                    : 'Confirm Assignment'}
+                </span>
               </button>
             </div>
           </div>

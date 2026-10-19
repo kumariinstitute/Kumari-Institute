@@ -59,6 +59,8 @@ export interface Tutor {
   rejectionReason?: string;
   approvedAt?: string;
   submittedAt?: string;
+  createdAt?: string;
+  profileCompleted?: boolean;
   customFeeSchedule?: any;
   feeClass1to7?: number;
   feeClass8to10?: number;
