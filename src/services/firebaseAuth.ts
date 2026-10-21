@@ -2443,102 +2443,153 @@ export function subscribeToAllTeachersForAdmin(onTeachersUpdate: (teachers: Tuto
     };
   };
 
+  const teachersMap = new Map<string, Tutor>();
+
+  const emit = () => {
+    const list = Array.from(teachersMap.values()).sort((a, b) => {
+      const timeA = new Date((a as any).updatedAt || a.createdAt || (a as any).submittedAt || 0).getTime();
+      const timeB = new Date((b as any).updatedAt || b.createdAt || (b as any).submittedAt || 0).getTime();
+      return timeB - timeA;
+    });
+    onTeachersUpdate(list);
+  };
+
+  // 1. Fetch from persistent server store (/api/admin/teachers) immediately
+  fetch("/api/admin/teachers")
+    .then((r) => r.json())
+    .then((res) => {
+      if (res?.success && Array.isArray(res.teachers)) {
+        res.teachers.forEach((t: any) => {
+          if (t && t.id) {
+            const isCompleted = Boolean(
+              t.profileCompleted === true ||
+              t.isApproved === true ||
+              t.status === 'approved' ||
+              (t.qualification && (t.addressSnippet || t.locationArea))
+            );
+            const parsed = parseFirestoreTeacher(t.id, {
+              ...t,
+              profileCompleted: isCompleted
+            });
+            teachersMap.set(t.id, parsed);
+          }
+        });
+        emit();
+      }
+    })
+    .catch((err) => {
+      console.warn("Server admin teachers fetch notice:", err);
+    });
+
+  // Helper to ingest snapshot docs
+  const handleSnapshot = (snapshot: any, defaultRoleCompleted?: boolean) => {
+    snapshot.forEach((docSnap: any) => {
+      const data = docSnap.data();
+      const rawName = (data?.fullName || data?.name || '').trim();
+      if (!rawName) return;
+
+      const isCompletedProfile = Boolean(
+        defaultRoleCompleted ||
+        data?.profileCompleted === true ||
+        data?.isApproved === true ||
+        data?.status === 'approved' ||
+        (data?.educationDetails && (data?.address || data?.locality)) ||
+        (data?.qualification && (data?.address || data?.locality || data?.locationArea))
+      );
+
+      const tutorObj = parseFirestoreTeacher(docSnap.id, {
+        ...data,
+        profileCompleted: isCompletedProfile
+      });
+
+      teachersMap.set(docSnap.id, tutorObj);
+    });
+    emit();
+  };
+
+  const unsubscribers: (() => void)[] = [];
+
+  // 2. Real-time Firestore listener for 'teachers'
   try {
     const teachersCol = collection(db, "teachers");
     const unsub = onSnapshot(
       teachersCol,
-      (snapshot) => {
-        const firestoreTeachers: Tutor[] = [];
-        snapshot.forEach((docSnap) => {
-          const docId = docSnap.id.toLowerCase();
-          const data = docSnap.data();
-          const rawName = (data?.fullName || data?.name || '').trim();
-          if (
-            !rawName ||
-            rawName.toLowerCase() === 'educator' ||
-            rawName.toLowerCase().includes('educator') ||
-            docId.includes('educator') ||
-            docId.includes('sukumar') ||
-            docId.includes('priya-sharma') ||
-            docId.includes('rakesh-tripathy') ||
-            docId.includes('sneha-patel') ||
-            docId.includes('sagar-das') ||
-            docId.includes('anita-mohanty')
-          ) {
-            return;
-          }
-
-          // Mark whether tutor has completed and submitted their profile
-          const isCompletedProfile = Boolean(
-            data?.profileCompleted === true ||
-            (data?.educationDetails && (data?.address || data?.locality) && ((Array.isArray(data?.availableTimeSlots) && data.availableTimeSlots.length > 0) || (Array.isArray(data?.availableTimings) && data.availableTimings.length > 0)))
-          );
-
-          const tutorObj = parseFirestoreTeacher(docSnap.id, {
-            ...data,
-            profileCompleted: isCompletedProfile
-          });
-
-          firestoreTeachers.push(tutorObj);
-        });
-        onTeachersUpdate(firestoreTeachers);
-      },
+      (snapshot) => handleSnapshot(snapshot),
       (err) => {
         console.warn("Firestore admin teachers snapshot notice:", err);
-        onTeachersUpdate([]);
+        emit();
       }
     );
-    return unsub;
+    unsubscribers.push(unsub);
   } catch (err) {
     console.warn("Firestore admin teachers listener error:", err);
-    onTeachersUpdate([]);
-    return () => {};
   }
+
+  // 3. Real-time Firestore listener for 'complete_tutors'
+  try {
+    const completeCol = collection(db, "complete_tutors");
+    const unsub = onSnapshot(
+      completeCol,
+      (snapshot) => handleSnapshot(snapshot, true),
+      (err) => {
+        console.warn("Firestore complete_tutors snapshot notice:", err);
+      }
+    );
+    unsubscribers.push(unsub);
+  } catch (err) {
+    console.warn("Firestore complete_tutors listener error:", err);
+  }
+
+  // 4. Real-time Firestore listener for 'tutors_requests'
+  try {
+    const requestsCol = collection(db, "tutors_requests");
+    const unsub = onSnapshot(
+      requestsCol,
+      (snapshot) => handleSnapshot(snapshot),
+      (err) => {
+        console.warn("Firestore tutors_requests snapshot notice:", err);
+      }
+    );
+    unsubscribers.push(unsub);
+  } catch (err) {
+    console.warn("Firestore tutors_requests listener error:", err);
+  }
+
+  return () => {
+    unsubscribers.forEach((fn) => {
+      try {
+        fn();
+      } catch {}
+    });
+  };
 }
 
 const FAKE_PARENT_PATTERNS = [
-  'parent-ramesh-patnaik',
-  'parent-sasmita-sahu',
-  'parent-deepak-mohanty',
-  'aa3qpbnfr4eimeftvmrj0vatvdq2',
-  'ramesh patnaik',
-  'sasmita sahu',
-  'deepak mohanty',
-  'sunil kumar',
-  'rohan kumar',
-  'ananya patnaik',
-  'aryan sahu',
-  'subhashree mohanty',
-  'anjan naik',
-  'kqc3hy8leicwk9blsnek3t8mxdx2'
+  'demo_sample_dummy',
+  'fake_placeholder_mock'
 ];
 
 export function isFakeParent(data: any): boolean {
   if (!data) return true;
   const id = String(data.uid || data.id || '').toLowerCase();
   const name = String(data.fullName || data.name || '').toLowerCase().trim();
-  const child = String(data.childName || '').toLowerCase().trim();
   const email = String(data.email || '').toLowerCase().trim();
 
-  if (!name || name === 'parent' || name === 'test' || name === 'test parent' || name.includes('demo') || name.includes('sample')) {
+  // Only reject truly empty or dummy test placeholder objects
+  if (!name && !email) {
     return true;
   }
-  if (id.includes('demo') || id.includes('sample') || id.includes('mock') || id.includes('fake')) {
+  if (name === 'sample parent' || name === 'dummy parent' || name === 'test parent dummy') {
     return true;
   }
-  // User Requirement: only show real verified data who completed registration
-  const hasCompletedRegistration = data.profileCompleted === true || child.length > 0;
-  if (!hasCompletedRegistration) {
+  if (id.includes('dummy_parent') || id.includes('sample_mock')) {
     return true;
   }
 
   for (const pattern of FAKE_PARENT_PATTERNS) {
-    if (id.includes(pattern) || name.includes(pattern) || child.includes(pattern)) {
+    if (id.includes(pattern) || name.includes(pattern)) {
       return true;
     }
-  }
-  if (data.role === 'parent' && email === 'rjanaki696@gmail.com' && name.includes('sunil')) {
-    return true;
   }
   return false;
 }
@@ -2624,25 +2675,20 @@ export function subscribeToAllParentsForAdmin(onParentsUpdate: (parents: AppUser
       .filter((p) => !isFakeParent(p) && p.role === 'parent')
       .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
-    // Strict deduplication by normalized email, phone, and UID to guarantee no duplicates
+    // Deduplication by UID and normalized non-empty email
     const seenUids = new Set<string>();
     const seenEmails = new Set<string>();
-    const seenPhones = new Set<string>();
     const deduplicated: AppUserProfile[] = [];
 
     for (const p of rawList) {
       const email = (p.email || '').trim().toLowerCase();
-      const rawPhone = ((p as any).phoneNumber || (p as any).phone || '').replace(/\D/g, '');
-      const phone = rawPhone.length >= 10 ? rawPhone.slice(-10) : '';
       const uid = (p.uid || '').trim();
 
       if (uid && seenUids.has(uid)) continue;
       if (email && seenEmails.has(email)) continue;
-      if (phone && seenPhones.has(phone)) continue;
 
       if (uid) seenUids.add(uid);
       if (email) seenEmails.add(email);
-      if (phone) seenPhones.add(phone);
 
       deduplicated.push(p);
     }
@@ -2798,7 +2844,7 @@ export async function adminDirectAssignTutorToParent(
       studentGrade,
       board,
       subjects: tutor.subjects.length > 0 ? tutor.subjects : ['Foundational Subjects'],
-      address: parent.address || parent.locality || tutor.locationArea || 'Rayagada',
+      address: (parent as any).address || parent.locality || tutor.locationArea || 'Rayagada',
       locality: tutor.locationArea || 'Rayagada',
       preferredTimeSlot: preferredTimeSlot || tutor.availableTimeSlots?.[0] || '5:00 PM - 6:00 PM',
       requestedTutorId: tutor.id,
@@ -2878,6 +2924,7 @@ export async function adminVerifyTutorInDatabase(
       };
 
       await setDoc(tutorRef, approvalUpdates, { merge: true }).catch((err) => console.warn('Firestore tutor verify notice:', err));
+      await setDoc(doc(db, "complete_tutors", tutorId), approvalUpdates, { merge: true }).catch(() => {});
 
       // Cross-sync if teacher doc has email or linked uid
       try {
@@ -2953,6 +3000,7 @@ export async function adminVerifyTutorInDatabase(
       };
 
       await setDoc(tutorRef, rejectUpdates, { merge: true }).catch((err) => console.warn('Firestore tutor reject notice:', err));
+      await deleteDoc(doc(db, "complete_tutors", tutorId)).catch(() => {});
 
       unmarkTeacherApprovedInRegistry(tutorId);
       unmarkTeacherApprovedInRegistry(tutorId.replace(/^fb_teacher_/, ''));
@@ -3243,13 +3291,11 @@ export function subscribeToRealtimeBookings(onBookingsUpdate: (bookings: any[]) 
       },
       (err) => {
         console.warn("Firestore tutor_bookings listener notice:", err);
-        onBookingsUpdate([]);
       }
     );
     return unsub;
   } catch (err) {
     console.warn("Firestore bookings listener setup error:", err);
-    onBookingsUpdate([]);
     return () => {};
   }
 }
@@ -3904,6 +3950,16 @@ export async function deleteSuccessStoryFromFirestore(storyId: string): Promise<
  * Real-time listener for Success Stories from Firestore collection 'success_stories'
  */
 export function subscribeToRealtimeSuccessStories(onUpdate: (stories: AdminSuccessStory[]) => void): () => void {
+  // Pre-load from server API
+  fetch('/api/success-stories')
+    .then((r) => r.json())
+    .then((res) => {
+      if (res?.stories && Array.isArray(res.stories)) {
+        onUpdate(res.stories);
+      }
+    })
+    .catch((err) => console.warn('Success stories API notice:', err));
+
   try {
     const col = collection(db, "success_stories");
     const unsub = onSnapshot(
@@ -3928,17 +3984,17 @@ export function subscribeToRealtimeSuccessStories(onUpdate: (stories: AdminSucce
         });
         // Sort by createdAt desc
         list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-        onUpdate(list);
+        if (list.length > 0) {
+          onUpdate(list);
+        }
       },
       (err) => {
         console.warn('Firestore success_stories listener notice:', err);
-        onUpdate([]);
       }
     );
     return unsub;
   } catch (err) {
     console.warn('Firestore success_stories setup error:', err);
-    onUpdate([]);
     return () => {};
   }
 }
@@ -4208,6 +4264,16 @@ export async function logAdminActivity(
 export function subscribeToRealtimeActivityLogs(
   onUpdate: (logs: AdminActivityLog[], metrics?: any) => void
 ): () => void {
+  // Pre-load from server API
+  fetch("/api/admin/activity-logs")
+    .then((r) => r.json())
+    .then((res) => {
+      if (res?.logs && Array.isArray(res.logs)) {
+        onUpdate(res.logs);
+      }
+    })
+    .catch((err) => console.warn("Activity logs API notice:", err));
+
   try {
     const col = collection(db, "activity_logs");
     const unsub = onSnapshot(
@@ -4244,17 +4310,17 @@ export function subscribeToRealtimeActivityLogs(
 
         // Sort by timestamp desc
         list.sort((a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime());
-        onUpdate(list);
+        if (list.length > 0) {
+          onUpdate(list);
+        }
       },
       (err) => {
         console.warn("Firestore activity_logs listener notice:", err);
-        onUpdate([]);
       }
     );
     return unsub;
   } catch (err) {
     console.warn("Firestore activity_logs setup error:", err);
-    onUpdate([]);
     return () => {};
   }
 }
@@ -4572,38 +4638,48 @@ export interface FirestoreGalleryItem {
 export function subscribeToGalleryManager(
   onUpdate: (items: FirestoreGalleryItem[]) => void
 ): () => void {
-  try {
-    const col = collection(db, "gallery");
-    const unsub = onSnapshot(
-      col,
-      (snapshot) => {
-        const list: FirestoreGalleryItem[] = [];
-        snapshot.forEach((d) => {
-          const data = d.data();
-          list.push({
-            id: d.id,
-            title: data.title || "",
-            subtitle: data.subtitle || "",
-            category: data.category || "students",
-            imageUrl: data.imageUrl || data.image || "",
-            image: data.imageUrl || data.image || "",
-            createdAt: data.createdAt || new Date().toISOString()
-          });
-        });
-        list.sort(
-          (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-        );
-        onUpdate(list);
-      },
-      (err) => {
-        console.warn("Firestore gallery listener notice:", err);
-      }
+  const itemsMap = new Map<string, FirestoreGalleryItem>();
+
+  const emit = () => {
+    const list = Array.from(itemsMap.values()).sort(
+      (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
     );
-    return unsub;
-  } catch (err) {
-    console.warn("Firestore gallery setup error:", err);
-    return () => {};
-  }
+    onUpdate(list);
+  };
+
+  const handleSnap = (snapshot: any) => {
+    snapshot.forEach((d: any) => {
+      const data = d.data();
+      const img = data.imageUrl || data.image || "";
+      if (img) {
+        itemsMap.set(d.id, {
+          id: d.id,
+          title: data.title || "",
+          subtitle: data.subtitle || "",
+          category: data.category || "students",
+          imageUrl: img,
+          image: img,
+          createdAt: data.createdAt || new Date().toISOString()
+        });
+      }
+    });
+    emit();
+  };
+
+  const unsubs: (() => void)[] = [];
+  ['gallery', 'gallery_manager', 'gallery_items'].forEach((cName) => {
+    try {
+      const col = collection(db, cName);
+      const unsub = onSnapshot(col, handleSnap, (err) => {
+        console.warn(`Firestore ${cName} notice:`, err);
+      });
+      unsubs.push(unsub);
+    } catch {}
+  });
+
+  return () => {
+    unsubs.forEach(fn => fn());
+  };
 }
 
 export async function saveGalleryItemToFirestore(item: {

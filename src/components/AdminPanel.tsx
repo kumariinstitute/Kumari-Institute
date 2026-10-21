@@ -80,6 +80,7 @@ import {
   subscribeToCompleteTutors,
   subscribeToTutorsReviews,
   subscribeToOfflineDemoQueries,
+  subscribeToAllEnquiries,
   adminDeleteOfflineDemoQuery,
   subscribeToGalleryManager,
   saveGalleryItemToFirestore,
@@ -372,19 +373,51 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setIsLoadingTutors(false);
     });
 
-    // 1. Incoming Bookings collection - Only pending unhandled bookings
-    const unsubIncomingBookings = subscribeToRealtimeIncomingBookings((liveIncoming) => {
-      const activeIncoming = (liveIncoming || []).filter(
-        (b) => b && b.status !== 'accepted' && b.status !== 'declined' && b.status !== 'reassigned' && (b.status === 'pending' || !b.status)
+    // 1. Incoming Bookings & Tutor Bookings unified listener
+    const bookingsMap = new Map<string, any>();
+
+    const emitBookings = () => {
+      const sorted = Array.from(bookingsMap.values()).sort(
+        (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
       );
-      setBookings(activeIncoming);
+      setBookings(sorted);
+    };
+
+    // Pre-populate from server store (/api/bookings)
+    fetch('/api/bookings')
+      .then((r) => r.json())
+      .then((res) => {
+        const list = res?.bookings || (Array.isArray(res) ? res : []);
+        list.forEach((b: any) => {
+          if (b && b.id) bookingsMap.set(b.id, b);
+        });
+        emitBookings();
+      })
+      .catch((err) => console.warn('Bookings API fetch notice:', err));
+
+    const unsubIncomingBookings = subscribeToRealtimeIncomingBookings((liveIncoming) => {
+      (liveIncoming || []).forEach((b) => {
+        if (b && b.id) {
+          bookingsMap.set(b.id, {
+            ...bookingsMap.get(b.id),
+            ...b,
+            status: b.status || bookingsMap.get(b.id)?.status || 'pending'
+          });
+        }
+      });
+      emitBookings();
     });
 
     const unsubBookings = subscribeToRealtimeBookings((allBookings) => {
-      const activePending = (allBookings || []).filter(
-        (b) => b && b.status !== 'accepted' && b.status !== 'declined' && b.status !== 'reassigned' && (b.status === 'pending' || !b.status)
-      );
-      setBookings(activePending);
+      (allBookings || []).forEach((b) => {
+        if (b && b.id) {
+          bookingsMap.set(b.id, {
+            ...bookingsMap.get(b.id),
+            ...b
+          });
+        }
+      });
+      emitBookings();
     });
 
     // 3. Tutors Requests collection (registered tutors pending completion)
@@ -412,10 +445,50 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setTutorsReviews(revs);
     });
 
-    // 8. Offline Demo Queries collection
+    // 8. Offline Demo Queries & Enquiries unified collection
+    const queriesMap = new Map<string, any>();
+    const emitQueries = () => {
+      const list = Array.from(queriesMap.values()).sort(
+        (a, b) => new Date(b.createdAt || b.timestamp || 0).getTime() - new Date(a.createdAt || a.timestamp || 0).getTime()
+      );
+      setDemoQueries(list);
+    };
+
+    fetch('/api/admin/demo-queries')
+      .then((r) => r.json())
+      .then((res) => {
+        if (res?.queries && Array.isArray(res.queries)) {
+          res.queries.forEach((q: any) => { if (q && q.id) queriesMap.set(q.id, q); });
+          emitQueries();
+        }
+      })
+      .catch((err) => console.warn('Offline queries fetch notice:', err));
+
     const unsubOfflineQueries = subscribeToOfflineDemoQueries((queries) => {
       if (queries && queries.length > 0) {
-        setDemoQueries(queries);
+        queries.forEach((q) => { if (q && q.id) queriesMap.set(q.id, q); });
+        emitQueries();
+      }
+    });
+
+    const unsubEnquiries = subscribeToAllEnquiries((enqs) => {
+      if (enqs && enqs.length > 0) {
+        enqs.forEach((e) => {
+          if (e && e.id) {
+            queriesMap.set(e.id, {
+              id: e.id,
+              studentName: e.name || e.studentName || 'Student',
+              parentName: e.parentName || e.name || 'Parent',
+              phone: e.phone || '',
+              grade: e.grade || e.class || 'All Classes',
+              subjects: Array.isArray(e.subjects) ? e.subjects : (e.subject ? [e.subject] : ['General']),
+              message: e.message || e.notes || '',
+              status: e.status || 'pending',
+              createdAt: e.createdAt || e.timestamp || new Date().toISOString()
+            });
+          }
+        });
+        emitQueries();
       }
     });
 
@@ -496,6 +569,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       unsubCompleteWithdrawals();
       unsubTutorsReviews();
       unsubOfflineQueries();
+      unsubEnquiries();
       unsubGalleryManager();
       unsubSuccessStories();
       unsubActivityLogs();
@@ -702,8 +776,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Helper to distinguish un-profile updated tutors from completed/submitted tutors
   const isTutorProfileUpdated = (t: Tutor): boolean => {
-    // A tutor is strictly considered profile updated ONLY if they have completed and submitted their profile
-    return (t as any).profileCompleted === true;
+    return Boolean(
+      (t as any).profileCompleted === true ||
+      t.isApproved === true ||
+      t.status === 'approved' ||
+      (t.qualification && (t.addressSnippet || t.locationArea))
+    );
   };
 
   // Registered tutors who have NOT yet completed/updated their profile

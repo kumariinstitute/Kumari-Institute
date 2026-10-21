@@ -354,12 +354,32 @@ export async function processParentFeePayment(payload: {
     console.warn('[paymentService] Activity logs update notice:', err);
   }
 
+  // Also cache in localStorage
+  try {
+    const raw = localStorage.getItem('kumari_received_fees') || '[]';
+    const existing = JSON.parse(raw);
+    const updated = [feeRecord, ...existing.filter((r: any) => r.id !== receiptNo)];
+    localStorage.setItem('kumari_received_fees', JSON.stringify(updated));
+  } catch {}
+
   return {
     success: true,
     record: feeRecord,
     receipt: receiptForUser
   };
 }
+
+const getLocalReceivedFees = (parentUidFilter?: string): ReceivedFeeRecord[] => {
+  try {
+    const raw = localStorage.getItem('kumari_received_fees');
+    if (!raw) return [];
+    const parsed: ReceivedFeeRecord[] = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parentUidFilter ? parsed.filter(p => p.parentUid === parentUidFilter) : parsed;
+  } catch {
+    return [];
+  }
+};
 
 /**
  * Real-time subscription to `received_fees` collection for Admin and Parent
@@ -368,6 +388,12 @@ export function subscribeToReceivedFees(
   callback: (records: ReceivedFeeRecord[]) => void,
   parentUidFilter?: string
 ): () => void {
+  // Emit locally cached fees first
+  const localList = getLocalReceivedFees(parentUidFilter);
+  if (localList.length > 0) {
+    callback(localList);
+  }
+
   try {
     const colRef = collection(db, 'received_fees');
     const q = query(colRef, orderBy('paidAt', 'desc'));
@@ -382,18 +408,28 @@ export function subscribeToReceivedFees(
             list.push(item);
           }
         });
-        callback(list);
+        if (list.length > 0) {
+          try {
+            localStorage.setItem('kumari_received_fees', JSON.stringify(list));
+          } catch {}
+          callback(list);
+        } else if (localList.length > 0) {
+          callback(localList);
+        } else {
+          callback([]);
+        }
       },
       (err) => {
         console.warn('[paymentService] subscribeToReceivedFees notice:', err);
-        callback([]);
+        const fallback = getLocalReceivedFees(parentUidFilter);
+        callback(fallback);
       }
     );
 
     return unsubscribe;
   } catch (err) {
     console.warn('[paymentService] Error setting up listener:', err);
-    callback([]);
+    callback(getLocalReceivedFees(parentUidFilter));
     return () => {};
   }
 }
