@@ -2468,17 +2468,18 @@ export function subscribeToAllTeachersForAdmin(onTeachersUpdate: (teachers: Tuto
             return;
           }
 
-          // User Requirement: In the admin panel, all completed profile tutors only have to show.
-          // Logged-in teachers who haven't completed/updated their profile MUST NOT show in the admin panel.
+          // Mark whether tutor has completed and submitted their profile
           const isCompletedProfile = Boolean(
             data?.profileCompleted === true ||
             (data?.educationDetails && (data?.address || data?.locality) && ((Array.isArray(data?.availableTimeSlots) && data.availableTimeSlots.length > 0) || (Array.isArray(data?.availableTimings) && data.availableTimings.length > 0)))
           );
-          if (!isCompletedProfile) {
-            return;
-          }
 
-          firestoreTeachers.push(parseFirestoreTeacher(docSnap.id, data));
+          const tutorObj = parseFirestoreTeacher(docSnap.id, {
+            ...data,
+            profileCompleted: isCompletedProfile
+          });
+
+          firestoreTeachers.push(tutorObj);
         });
         onTeachersUpdate(firestoreTeachers);
       },
@@ -2707,7 +2708,7 @@ export function subscribeToAllParentsForAdmin(onParentsUpdate: (parents: AppUser
 }
 
 /**
- * Admin directly books and assigns a tutor to an unassigned registered parent
+ * Admin directly books and assigns a tutor to an unassigned registered parent (or reassigns/changes tutor)
  */
 export async function adminDirectAssignTutorToParent(
   parent: AppUserProfile,
@@ -2716,21 +2717,93 @@ export async function adminDirectAssignTutorToParent(
   notes?: string
 ): Promise<{ success: boolean; message: string; bookingId?: string }> {
   try {
-    // 1. Submit the home tutor booking request
+    const studentGrade = parent.childGrade || tutor.classesHandled[0] || '1st Class';
+    const board = (parent.childBoard as any) || 'CBSE';
+    const bKey = board === 'ICSE' ? 'icse' : 'cbse';
+    const tutorCustom = tutor?.customFeeSchedule;
+
+    // Calculate exact fee for the new tutor based on grade & board
+    const match = studentGrade.match(/(\d+)/);
+    const classNum = match ? parseInt(match[1], 10) : 1;
+    let targetFee = Number(tutor.monthlyFee) || 3000;
+
+    if (classNum <= 7) {
+      targetFee =
+        Number(tutorCustom?.[bKey]?.class1to7) ||
+        (board === 'CBSE' ? Number(tutor.feeClass1to7) : Math.round((Number(tutor.feeClass1to7) || 1500) * 1.15)) ||
+        targetFee;
+    } else if (classNum <= 10) {
+      const perSub =
+        Number(tutorCustom?.[bKey]?.class8to10) ||
+        (board === 'CBSE' ? Number(tutor.feeClass8to10) : 2000);
+      targetFee = perSub * Math.max(1, tutor.subjects?.length || 1);
+    } else {
+      const perSub =
+        Number(tutorCustom?.[bKey]?.class11to12) ||
+        (board === 'CBSE' ? Number(tutor.feeClass11to12) : 3000);
+      targetFee = perSub * Math.max(1, tutor.subjects?.length || 1);
+    }
+
+    // If changing from an existing tutor, release old tutor's assignment
+    const oldTutorId =
+      parent.assignedTutorId ||
+      parent.assignedEducator?.id ||
+      (Array.isArray(parent.hiredTutors) && parent.hiredTutors[0]?.tutorId) ||
+      (Array.isArray(parent.bookedTutors) && parent.bookedTutors[0]?.tutorId);
+
+    if (oldTutorId && oldTutorId !== tutor.id) {
+      try {
+        const oldRef = doc(db, "teachers", oldTutorId);
+        const oldSnap = await getDoc(oldRef);
+        if (oldSnap.exists()) {
+          const oldData = oldSnap.data();
+          const pPhone = (parent.phone || '').replace(/\D/g, '');
+          const pName = (parent.name || '').trim().toLowerCase();
+          const cName = (parent.childName || '').trim().toLowerCase();
+
+          const remainingStudents = (oldData.assignedStudents || []).filter((s: any) => {
+            const sPhone = (s.parentPhone || s.phone || '').toString().replace(/\D/g, '');
+            const sParentName = (s.parentName || '').toString().trim().toLowerCase();
+            const sStudentName = (s.studentName || s.name || '').toString().trim().toLowerCase();
+            if (pPhone && sPhone && pPhone === sPhone) return false;
+            if (cName && sStudentName && cName === sStudentName) return false;
+            if (pName && sParentName && pName === sParentName) return false;
+            return true;
+          });
+
+          const remainingSlots = (oldData.bookedTimeSlots || []).filter((slot: string) => {
+            return slot !== preferredTimeSlot;
+          });
+
+          await updateDoc(oldRef, {
+            assignedStudents: remainingStudents,
+            bookedTimeSlots: remainingSlots,
+            isBooked: remainingStudents.length > 0,
+            bookingStatus: remainingStudents.length > 0 ? 'booked' : 'available',
+            updatedAt: new Date().toISOString()
+          });
+        }
+      } catch (oldErr) {
+        console.warn('Notice releasing previous tutor assignment:', oldErr);
+      }
+    }
+
+    // 1. Submit the home tutor booking request with the new tutor's calculated fee
     const bookingRes = await submitHomeTutorBooking({
       parentUid: parent.uid,
       parentName: parent.name,
       parentPhone: parent.phone || '',
       parentEmail: parent.email || '',
       studentName: parent.childName || `${parent.name}'s Child`,
-      studentGrade: parent.childGrade || tutor.classesHandled[0] || 'Class 4',
+      studentGrade,
+      board,
       subjects: tutor.subjects.length > 0 ? tutor.subjects : ['Foundational Subjects'],
-      address: parent.locality || tutor.locationArea || 'Rayagada',
+      address: parent.address || parent.locality || tutor.locationArea || 'Rayagada',
       locality: tutor.locationArea || 'Rayagada',
       preferredTimeSlot: preferredTimeSlot || tutor.availableTimeSlots?.[0] || '5:00 PM - 6:00 PM',
       requestedTutorId: tutor.id,
       requestedTutorName: tutor.name,
-      requestedTutorMonthlyFee: tutor.monthlyFee,
+      requestedTutorMonthlyFee: targetFee,
       requestedTutorAvatar: tutor.avatar
     });
 
@@ -2738,12 +2811,36 @@ export async function adminDirectAssignTutorToParent(
     await adminAcceptAndAssignTutorBooking(
       bookingRes.bookingId,
       tutor.id,
-      notes || 'Directly assigned by Administrator from Registered Directory'
+      notes || `Tutor assigned by Admin. Monthly tuition fee updated to ₹${targetFee}`
     );
+
+    // 3. Explicitly ensure parent document has updated feesAmount
+    try {
+      const pDocRef = doc(db, "parents", parent.uid);
+      await setDoc(pDocRef, {
+        feesAmount: targetFee,
+        assignedTutor: tutor.name,
+        assignedTutorId: tutor.id,
+        assignedTutorPhone: tutor.phone || '+91 78944 92010',
+        assignedEducator: {
+          id: tutor.id,
+          name: tutor.name,
+          tutorName: tutor.name,
+          subjects: tutor.subjects,
+          phone: tutor.phone || '+91 78944 92010',
+          monthlyFee: targetFee,
+          avatar: tutor.avatar || '',
+          status: 'Active'
+        },
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    } catch (pe) {
+      console.warn('Direct parent fee update notice:', pe);
+    }
 
     return {
       success: true,
-      message: `Successfully assigned ${tutor.name} to ${parent.name}!`,
+      message: `Successfully assigned ${tutor.name} to ${parent.name}! Monthly fee updated to ₹${targetFee}.`,
       bookingId: bookingRes.bookingId
     };
   } catch (err: any) {
@@ -3668,7 +3765,15 @@ export async function adminDeclineTutorBooking(
   reason?: string
 ): Promise<{ success: boolean; message: string; booking?: any }> {
   try {
-    // 1. Update Firestore doc in 'tutor_bookings'
+    // 1. Remove from 'incoming_bookings' collection (once declined, removed from database)
+    try {
+      const incomingBookingRef = doc(db, "incoming_bookings", bookingId);
+      await deleteDoc(incomingBookingRef);
+    } catch (delErr) {
+      console.warn('incoming_bookings delete on decline notice:', delErr);
+    }
+
+    // Also update Firestore doc in legacy 'tutor_bookings'
     const bookingRef = doc(db, "tutor_bookings", bookingId);
     await updateDoc(bookingRef, {
       status: 'declined',

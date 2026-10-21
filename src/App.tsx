@@ -70,6 +70,23 @@ export default function App() {
   const [isResultsModalOpen, setIsResultsModalOpen] = useState(false);
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
 
+  // Push history step so mobile hardware back button goes back one step rather than exiting site
+  const pushStep = (info: { tab?: string; modal?: string; view?: string }) => {
+    try {
+      window.history.pushState(
+        {
+          tab: info.tab || activeTab,
+          modal: info.modal || null,
+          view: info.view || null,
+          time: Date.now()
+        },
+        ''
+      );
+    } catch {
+      // ignore
+    }
+  };
+
   // Synchronize authenticated user state with Firebase Authentication & Firestore in real-time
   useEffect(() => {
     const unsubscribe = subscribeToFirebaseAuth((firebaseUser) => {
@@ -83,13 +100,19 @@ export default function App() {
           firebaseUser.email?.toLowerCase().includes('kkumariinstitut');
         if (isAdmin) {
           setActiveTab('admin');
+        } else if (
+          (firebaseUser.role === 'teacher' || (firebaseUser as any).role === 'tutor') &&
+          !firebaseUser.profileCompleted
+        ) {
+          // Requirement: When a tutor logs in, if profile is not completed, redirect to complete profile page
+          setIsCompletingTeacherProfile(true);
+          setActiveTab('profile');
         } else {
-          // If user was on auth tab waiting for verification or logging in, transition smoothly
+          // If user was on auth tab, transition to home or profile
           setActiveTab((prev) => (prev === 'auth' ? 'home' : prev));
         }
       } else {
         setCurrentUser(null);
-        // If a user signs out from another tab while on profile, transition to home
         setActiveTab((prev) => (prev === 'profile' ? 'home' : prev));
       }
     });
@@ -97,55 +120,146 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  const handleOpenDemo = () => setIsDemoModalOpen(true);
-  const handleOpenEnquiry = () => setIsEnquiryModalOpen(true);
-  const handleOpenResults = () => setIsResultsModalOpen(true);
-  const handleSelectProgram = (program: Program) => setSelectedProgram(program);
+  // MOBILE BACK BUTTON FEATURE: Go back 1 step rather than exit the page
+  useEffect(() => {
+    try {
+      if (!window.history.state) {
+        window.history.replaceState({ tab: 'home', root: true }, '');
+      }
+    } catch {
+      // ignore
+    }
+
+    const handlePopState = (e: PopStateEvent) => {
+      // 1. Close open modal if any
+      if (isDemoModalOpen) {
+        setIsDemoModalOpen(false);
+        return;
+      }
+      if (isEnquiryModalOpen) {
+        setIsEnquiryModalOpen(false);
+        return;
+      }
+      if (isResultsModalOpen) {
+        setIsResultsModalOpen(false);
+        return;
+      }
+      if (selectedProgram) {
+        setSelectedProgram(null);
+        return;
+      }
+
+      // 2. If viewing single tutor profile, close it back to tutor search
+      if (isViewingTutorProfile) {
+        setIsViewingTutorProfile(false);
+        return;
+      }
+
+      // 3. If filling complete teacher profile, step back to dashboard/home
+      if (isCompletingTeacherProfile) {
+        setIsCompletingTeacherProfile(false);
+        return;
+      }
+
+      // 4. If on another tab than 'home', go back to previous tab or home
+      if (activeTab !== 'home') {
+        const state = e.state;
+        if (state && state.tab && state.tab !== activeTab) {
+          setActiveTab(state.tab);
+        } else {
+          setActiveTab('home');
+        }
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [
+    isDemoModalOpen,
+    isEnquiryModalOpen,
+    isResultsModalOpen,
+    selectedProgram,
+    isViewingTutorProfile,
+    isCompletingTeacherProfile,
+    activeTab
+  ]);
+
+  const handleOpenDemo = () => {
+    pushStep({ modal: 'demo' });
+    setIsDemoModalOpen(true);
+  };
+  const handleOpenEnquiry = () => {
+    pushStep({ modal: 'enquiry' });
+    setIsEnquiryModalOpen(true);
+  };
+  const handleOpenResults = () => {
+    pushStep({ modal: 'results' });
+    setIsResultsModalOpen(true);
+  };
+  const handleSelectProgram = (program: Program) => {
+    pushStep({ modal: 'program' });
+    setSelectedProgram(program);
+  };
 
   const handleNavigateHome = () => {
     setIsViewingTutorProfile(false);
-    setActiveTab('home');
+    setIsCompletingTeacherProfile(false);
+    if (activeTab !== 'home') {
+      pushStep({ tab: 'home' });
+      setActiveTab('home');
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleNavigateTutors = () => {
     setIsViewingTutorProfile(false);
+    pushStep({ tab: 'tutors' });
     setActiveTab('tutors');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleNavigateExamPrep = () => {
     setIsViewingTutorProfile(false);
+    pushStep({ tab: 'exam-prep' });
     setActiveTab('exam-prep');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleNavigateAbout = () => {
     setIsViewingTutorProfile(false);
+    pushStep({ tab: 'about' });
     setActiveTab('about');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleNavigateSuccess = () => {
     setIsViewingTutorProfile(false);
+    pushStep({ tab: 'success' });
     setActiveTab('success');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleNavigateGallery = () => {
     setIsViewingTutorProfile(false);
+    pushStep({ tab: 'gallery' });
     setActiveTab('gallery');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleNavigateContact = () => {
     setIsViewingTutorProfile(false);
+    pushStep({ tab: 'contact' });
     setActiveTab('contact');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleNavigateAdmin = () => {
     setIsViewingTutorProfile(false);
+    pushStep({ tab: 'admin' });
     setActiveTab('admin');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -157,12 +271,25 @@ export default function App() {
     setIsViewingTutorProfile(false);
     setAuthInitialMode(mode);
     setAuthInitialRole(role);
+    pushStep({ tab: 'auth' });
     setActiveTab('auth');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleNavigateProfile = () => {
     setIsViewingTutorProfile(false);
+    // User Requirement: if tutor has NOT completed profile, clicking profile icon opens complete profile page
+    if (
+      currentUser &&
+      (currentUser.role === 'teacher' || (currentUser as any).role === 'tutor') &&
+      !currentUser.profileCompleted
+    ) {
+      pushStep({ tab: 'profile', view: 'complete-profile' });
+      setIsCompletingTeacherProfile(true);
+    } else {
+      pushStep({ tab: 'profile' });
+      setIsCompletingTeacherProfile(false);
+    }
     setActiveTab('profile');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -236,6 +363,15 @@ export default function App() {
                 setCurrentUser(user);
                 if (user.role === 'admin' || user.email?.toLowerCase().includes('kkumariinstitut')) {
                   setActiveTab('admin');
+                } else if (
+                  (user.role === 'teacher' || (user as any).role === 'tutor') &&
+                  !user.profileCompleted
+                ) {
+                  // Requirement: when a tutor logs in, redirect to complete profile page
+                  setIsCompletingTeacherProfile(true);
+                  setActiveTab('profile');
+                } else {
+                  setActiveTab('profile');
                 }
               } else {
                 console.warn('Blocked unverified user session in App.tsx');

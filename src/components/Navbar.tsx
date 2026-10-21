@@ -236,26 +236,38 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {/* User Profile Badge if logged in (NO Log In button when logged out) */}
             {currentUser && (
-              <button
-                type="button"
-                id="desktop-profile-btn"
-                onClick={onOpenProfile}
-                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full font-bold text-xs bg-[#0b2b57] hover:bg-[#103a73] border border-blue-400/40 text-white shadow-md shadow-black/40 hover:shadow-lg transition-all duration-200 active:scale-95 cursor-pointer"
-                title="Click to view My Profile"
-              >
-                <div
-                  className={`w-6 h-6 rounded-full text-slate-950 flex items-center justify-center font-black text-xs shadow-sm ${
-                    currentUser.role === 'admin'
-                      ? 'bg-amber-400'
-                      : currentUser.role === 'teacher'
-                      ? 'bg-purple-400'
-                      : 'bg-amber-300'
-                  }`}
+              <div className="relative inline-flex items-center">
+                {/* Tutor Update Profile Pop-up (Shows ONLY when tutor profile is incomplete) */}
+                {(currentUser.role === 'teacher' || (currentUser as any).role === 'tutor') && !currentUser.profileCompleted && (
+                  <div
+                    id="tutor-update-profile-popup"
+                    className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black text-[10px] shadow-md border border-amber-300 animate-bounce flex items-center gap-1 z-30 pointer-events-none"
+                  >
+                    <span>Update Profile</span>
+                    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-amber-400 rotate-45 border-r border-b border-amber-300" />
+                  </div>
+                )}
+                <button
+                  type="button"
+                  id="desktop-profile-btn"
+                  onClick={onOpenProfile}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full font-bold text-xs bg-[#0b2b57] hover:bg-[#103a73] border border-blue-400/40 text-white shadow-md shadow-black/40 hover:shadow-lg transition-all duration-200 active:scale-95 cursor-pointer"
+                  title="Click to view My Profile"
                 >
-                  {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : <User className="w-3.5 h-3.5" />}
-                </div>
-                <span className="max-w-[100px] truncate text-slate-100">{currentUser.name}</span>
-              </button>
+                  <div
+                    className={`w-6 h-6 rounded-full text-slate-950 flex items-center justify-center font-black text-xs shadow-sm ${
+                      currentUser.role === 'admin'
+                        ? 'bg-amber-400'
+                        : currentUser.role === 'teacher'
+                        ? 'bg-purple-400'
+                        : 'bg-amber-300'
+                    }`}
+                  >
+                    {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : <User className="w-3.5 h-3.5" />}
+                  </div>
+                  <span className="max-w-[100px] truncate text-slate-100">{currentUser.name}</span>
+                </button>
+              </div>
             )}
           </div>
         </div>

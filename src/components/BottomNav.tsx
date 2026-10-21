@@ -262,16 +262,26 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         </button>
 
         {/* 5. PROFILE (ON THE RIGHT SIDE WHERE CONTACT ICON WAS) */}
-        <button
-          type="button"
-          id="bottom-nav-profile"
-          onClick={handleProfileClick}
-          className={`flex flex-col items-center justify-center py-1 transition-all duration-200 cursor-pointer ${
-            isProfileActive ? 'text-[#0c2340]' : 'text-slate-500 hover:text-slate-800'
-          }`}
-          title={currentUser ? `Profile: ${currentUser.name}` : 'My Profile'}
-        >
-          <div className="relative">
+        <div className="relative flex flex-col items-center justify-center">
+          {currentUser && (currentUser.role === 'teacher' || (currentUser as any).role === 'tutor') && !currentUser.profileCompleted && (
+            <div
+              id="mobile-bottom-nav-update-profile-popup"
+              className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black text-[9px] shadow-md border border-amber-300 animate-bounce flex items-center gap-1 z-30 pointer-events-none"
+            >
+              <span>Update Profile</span>
+              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-amber-400 rotate-45 border-r border-b border-amber-300" />
+            </div>
+          )}
+          <button
+            type="button"
+            id="bottom-nav-profile"
+            onClick={handleProfileClick}
+            className={`flex flex-col items-center justify-center py-1 transition-all duration-200 cursor-pointer ${
+              isProfileActive ? 'text-[#0c2340]' : 'text-slate-500 hover:text-slate-800'
+            }`}
+            title={currentUser ? `Profile: ${currentUser.name}` : 'My Profile'}
+          >
+            <div className="relative">
             {currentUser ? (
               <div
                 className={`w-5 h-5 rounded-full text-slate-950 flex items-center justify-center text-[10px] font-black shrink-0 ${
@@ -300,6 +310,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             {currentUser ? 'Profile' : 'Profile'}
           </span>
         </button>
+        </div>
       </div>
     </nav>
   );

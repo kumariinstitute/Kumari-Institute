@@ -809,16 +809,6 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
           <div className="flex items-center gap-2.5 self-start sm:self-center flex-wrap">
             {isTeacher ? (
               <>
-                {onCompleteTeacherProfile && (
-                  <button
-                    type="button"
-                    onClick={onCompleteTeacherProfile}
-                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#1d4ed8] to-[#1e40af] hover:from-blue-700 hover:to-blue-900 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
-                  >
-                    <GraduationCap className="w-3.5 h-3.5 text-amber-300" />
-                    <span>Complete Profile</span>
-                  </button>
-                )}
                 <button
                   type="button"
                   onClick={() => setIsSalaryModalOpen(true)}
@@ -1447,16 +1437,6 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                   <span className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200/60 px-2.5 py-0.5 rounded-full">
                     {profileCompletionPercent}% Completed
                   </span>
-                  {onCompleteTeacherProfile && (
-                    <button
-                      type="button"
-                      onClick={onCompleteTeacherProfile}
-                      className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-all active:scale-95"
-                    >
-                      <GraduationCap className="w-3.5 h-3.5 text-amber-300" />
-                      <span>Complete Profile</span>
-                    </button>
-                  )}
                 </div>
               </div>
 

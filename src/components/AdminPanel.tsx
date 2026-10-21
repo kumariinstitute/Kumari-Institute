@@ -372,15 +372,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setIsLoadingTutors(false);
     });
 
-    // 1. Incoming Bookings collection
+    // 1. Incoming Bookings collection - Only pending unhandled bookings
     const unsubIncomingBookings = subscribeToRealtimeIncomingBookings((liveIncoming) => {
-      if (liveIncoming && liveIncoming.length > 0) {
-        setBookings(liveIncoming);
-      }
+      const activeIncoming = (liveIncoming || []).filter(
+        (b) => b && b.status !== 'accepted' && b.status !== 'declined' && b.status !== 'reassigned' && (b.status === 'pending' || !b.status)
+      );
+      setBookings(activeIncoming);
     });
 
     const unsubBookings = subscribeToRealtimeBookings((allBookings) => {
-      setBookings(allBookings);
+      const activePending = (allBookings || []).filter(
+        (b) => b && b.status !== 'accepted' && b.status !== 'declined' && b.status !== 'reassigned' && (b.status === 'pending' || !b.status)
+      );
+      setBookings(activePending);
     });
 
     // 3. Tutors Requests collection (registered tutors pending completion)
@@ -698,12 +702,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Helper to distinguish un-profile updated tutors from completed/submitted tutors
   const isTutorProfileUpdated = (t: Tutor): boolean => {
-    if ((t as any).profileCompleted === false) return false;
-    if ((t as any).profileCompleted === true) return true;
-    const hasSubs = Array.isArray(t.subjects) && t.subjects.length > 0;
-    const hasClasses = Array.isArray(t.classesHandled) && t.classesHandled.length > 0;
-    const hasQual = Boolean(t.qualification && t.qualification.trim().length > 0);
-    return hasSubs && hasClasses && hasQual;
+    // A tutor is strictly considered profile updated ONLY if they have completed and submitted their profile
+    return (t as any).profileCompleted === true;
   };
 
   // Registered tutors who have NOT yet completed/updated their profile
@@ -1384,20 +1384,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       const res = await adminAcceptAndAssignTutorBooking(booking.id, booking.requestedTutorId, 'Confirmed requested tutor by Admin.');
       showToast('success', `Home Tutor ${booking.requestedTutorName} successfully assigned to ${booking.studentName}!`);
       
-      // Update local bookings
-      setBookings((prev) =>
-        prev.map((b) =>
-          b.id === booking.id
-            ? {
-                ...b,
-                status: 'accepted',
-                assignedTutorId: booking.requestedTutorId,
-                assignedTutorName: booking.requestedTutorName,
-                assignedTutorFee: booking.requestedTutorMonthlyFee
-              }
-            : b
-        )
-      );
+      // Remove booking from incoming queue upon acceptance
+      setBookings((prev) => prev.filter((b) => b.id !== booking.id));
 
       // Update tutor as booked
       setTutors((prev) =>
@@ -1432,19 +1420,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       const res = await adminDeclineTutorBooking(declineModalBooking.id, finalReason);
       showToast('info', `Booking request for ${declineModalBooking.studentName} has been declined.`);
 
-      setBookings((prev) =>
-        prev.map((b) =>
-          b.id === declineModalBooking.id
-            ? {
-                ...b,
-                status: 'declined',
-                declineReason: finalReason,
-                declinedAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-              }
-            : b
-        )
-      );
+      // Remove booking from incoming queue upon decline
+      setBookings((prev) => prev.filter((b) => b.id !== declineModalBooking.id));
 
       setDeclineModalBooking(null);
     } catch (err: any) {
@@ -2023,14 +2000,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <UserPlus className="w-4 h-4 shrink-0" />
                   <span className="truncate">3. Tutors Request</span>
                 </div>
-                {pendingTutorsCount > 0 ? (
+                {pendingTutorsCount > 0 && (
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
                     activeTab === 'tutors_requests' ? 'bg-slate-950 text-amber-300' : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
                   }`}>
                     {pendingTutorsCount} New
                   </span>
-                ) : (
-                  <span className="text-[10px] text-slate-400 font-semibold">{tutorRequests.length}</span>
                 )}
               </button>
 

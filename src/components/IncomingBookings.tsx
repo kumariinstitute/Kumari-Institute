@@ -70,20 +70,21 @@ export const IncomingBookings: React.FC<IncomingBookingsProps> = ({
   useEffect(() => {
     setIsLoading(true);
     const unsubscribe = subscribeToRealtimeBookings((liveBookings) => {
-      setBookings(liveBookings);
+      // Incoming bookings section should strictly show pending unhandled bookings
+      const pendingIncoming = (liveBookings || []).filter(
+        (b) => b && b.status !== 'accepted' && b.status !== 'declined' && b.status !== 'reassigned' && (b.status === 'pending' || !b.status)
+      );
+      setBookings(pendingIncoming);
       setIsLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
-  // Filtered and searched bookings
-  const pendingBookings = useMemo(() => bookings.filter((b) => b.status === 'pending'), [bookings]);
-  const acceptedBookings = useMemo(
-    () => bookings.filter((b) => b.status === 'accepted' || b.status === 'reassigned'),
-    [bookings]
-  );
-  const declinedBookings = useMemo(() => bookings.filter((b) => b.status === 'declined'), [bookings]);
+  // Filtered and searched bookings (only unhandled incoming bookings)
+  const pendingBookings = bookings;
+  const acceptedBookings: HomeTutorBooking[] = [];
+  const declinedBookings: HomeTutorBooking[] = [];
 
   const filteredBookings = useMemo(() => {
     let list = bookings;
@@ -128,21 +129,8 @@ export const IncomingBookings: React.FC<IncomingBookingsProps> = ({
         booking
       );
 
-      // Update local state optimistically
-      setBookings((prev) =>
-        prev.map((b) =>
-          b.id === booking.id
-            ? {
-                ...b,
-                status: 'accepted',
-                assignedTutorId: tutorId,
-                assignedTutorName: booking.requestedTutorName,
-                assignedTutorFee: booking.requestedTutorMonthlyFee,
-                updatedAt: new Date().toISOString()
-              }
-            : b
-        )
-      );
+      // Remove immediately from incoming bookings queue upon acceptance
+      setBookings((prev) => prev.filter((b) => b.id !== booking.id));
 
       if (onTutorAssigned) {
         onTutorAssigned(tutorId);
@@ -176,21 +164,10 @@ export const IncomingBookings: React.FC<IncomingBookingsProps> = ({
     try {
       await adminDeclineTutorBooking(declineModalBooking.id, finalReason);
 
-      setBookings((prev) =>
-        prev.map((b) =>
-          b.id === declineModalBooking.id
-            ? {
-                ...b,
-                status: 'declined',
-                declineReason: finalReason,
-                declinedAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-              }
-            : b
-        )
-      );
+      // Remove immediately from incoming bookings queue upon decline
+      setBookings((prev) => prev.filter((b) => b.id !== declineModalBooking.id));
 
-      notify('info', `Booking request for ${declineModalBooking.studentName} has been declined.`);
+      notify('info', `Booking request for ${declineModalBooking.studentName} has been declined and removed.`);
       setDeclineModalBooking(null);
     } catch (err: any) {
       notify('error', err?.message || 'Failed to decline booking.');
@@ -222,26 +199,8 @@ export const IncomingBookings: React.FC<IncomingBookingsProps> = ({
         reassignModalBooking
       );
 
-      setBookings((prev) =>
-        prev.map((b) => {
-          if (b.id !== reassignModalBooking.id) return b;
-          const chosenHourly =
-            Number(chosenTutor?.hourlyRate) ||
-            Number((chosenTutor as any)?.hourlyCharges) ||
-            (chosenTutor?.monthlyFee ? Math.round(chosenTutor.monthlyFee / 30) : 100);
-          const chosenFee = chosenHourly > 0 ? chosenHourly * 30 : (chosenTutor?.monthlyFee || 3000);
-          return {
-            ...b,
-            status: 'reassigned',
-            assignedTutorId: selectedAlternativeTutorId,
-            assignedTutorName: chosenTutor?.name || 'Assigned Tutor',
-            assignedTutorFee: chosenFee,
-            assignedTutorAvatar: chosenTutor?.avatar,
-            reassignedNotes: reassignNotes,
-            updatedAt: new Date().toISOString()
-          };
-        })
-      );
+      // Remove booking from incoming queue upon reassignment
+      setBookings((prev) => prev.filter((b) => b.id !== reassignModalBooking.id));
 
       if (onTutorAssigned) {
         onTutorAssigned(selectedAlternativeTutorId);
