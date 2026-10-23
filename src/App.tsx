@@ -364,10 +364,9 @@ export default function App() {
                 if (user.role === 'admin' || user.email?.toLowerCase().includes('kkumariinstitut')) {
                   setActiveTab('admin');
                 } else if (
-                  (user.role === 'teacher' || (user as any).role === 'tutor') &&
-                  !user.profileCompleted
+                  user.role === 'teacher' || (user as any).role === 'tutor'
                 ) {
-                  // Requirement: when a tutor logs in, redirect to complete profile page
+                  // Requirement: when a tutor logs in, redirect to profile update page first on screen
                   setIsCompletingTeacherProfile(true);
                   setActiveTab('profile');
                 } else {

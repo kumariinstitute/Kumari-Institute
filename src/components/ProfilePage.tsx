@@ -1055,9 +1055,9 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                   {bookingsList.length > 0 ? (
                     <div className="space-y-3.5">
                       {bookingsList.map((item: any, idx: number) => {
-                        const isAccepted = item.status === 'accepted' || item.status === 'assigned' || (!item.status && item.id);
-                        const isPending = item.status === 'pending';
-                        const isDeclined = item.status === 'declined';
+                        const isAccepted = item.status === 'accepted' || item.status === 'assigned' || item.status === 'confirmed';
+                        const isDeclined = item.status === 'declined' || item.status === 'rejected';
+                        const isPending = !isAccepted && !isDeclined;
                         const tutorName = item.assignedTutorName || item.requestedTutorName || item.tutorName || item.name || 'Specialized Home Tutor';
                         const tutorFee = item.assignedTutorFee || item.requestedTutorMonthlyFee || item.monthlyFee;
                         const tutorPhone = item.assignedTutorPhone || item.phone;
@@ -1068,29 +1068,43 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                         return (
                           <div
                             key={item.id || `booking-${idx}`}
-                            className="p-4 rounded-xl border border-slate-200/90 bg-slate-50/50 hover:bg-slate-50 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
+                            className={`p-4 rounded-xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                              isAccepted
+                                ? 'border-emerald-200/90 bg-emerald-50/20 hover:bg-emerald-50/40'
+                                : isDeclined
+                                ? 'border-rose-200/90 bg-rose-50/20 hover:bg-rose-50/40'
+                                : 'border-slate-200/90 bg-slate-50/50 hover:bg-slate-50'
+                            }`}
                           >
                             <div className="flex items-start sm:items-center gap-3.5 min-w-0">
-                              <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-800 font-black text-sm flex items-center justify-center shrink-0 border border-blue-200">
+                              <div className={`w-12 h-12 rounded-xl font-black text-sm flex items-center justify-center shrink-0 border ${
+                                isAccepted
+                                  ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                  : isDeclined
+                                  ? 'bg-rose-100 text-rose-800 border-rose-300'
+                                  : 'bg-blue-100 text-blue-800 border-blue-200'
+                              }`}>
                                 {tutorName ? tutorName.slice(0, 2).toUpperCase() : 'HT'}
                               </div>
                               <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <h4 className="font-bold text-sm text-slate-900 truncate">{tutorName}</h4>
                                   {isAccepted && (
-                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                      ✓ Assigned &amp; Active
+                                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1 shadow-2xs">
+                                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                      <span>✓ Booking Accepted</span>
                                     </span>
                                   )}
                                   {isPending && (
-                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
+                                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
                                       <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                                      <span>Pending Admin Verification</span>
+                                      <span>⏳ Booking Pending Admin Review</span>
                                     </span>
                                   )}
                                   {isDeclined && (
-                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
-                                      ✕ Declined
+                                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1 shadow-2xs">
+                                      <X className="w-3 h-3 text-rose-600" />
+                                      <span>✕ Booking Rejected</span>
                                     </span>
                                   )}
                                 </div>
@@ -1110,10 +1124,22 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                                     <span className="text-emerald-700 font-bold">₹{tutorFee}/month</span>
                                   )}
                                 </div>
-                                {isDeclined && item.declineReason && (
-                                  <p className="text-[11px] text-rose-600 font-medium mt-1">
-                                    Reason: {item.declineReason}
-                                  </p>
+                                {isAccepted && (
+                                  <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-700 font-semibold">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                    <span>Admin Reaction: Accepted &amp; Confirmed for Home Tuition!</span>
+                                  </div>
+                                )}
+                                {isDeclined && (
+                                  <div className="mt-2 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-start gap-2">
+                                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                                    <div>
+                                      <span className="font-bold text-rose-800">Admin Reaction: Rejected</span>
+                                      <p className="text-[11px] text-rose-700 mt-0.5">
+                                        Reason: {item.declineReason || item.reason || 'Requested tutor schedule / slot is occupied. You may book another verified tutor below.'}
+                                      </p>
+                                    </div>
+                                  </div>
                                 )}
                               </div>
                             </div>
@@ -1527,6 +1553,97 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                 </button>
               </div>
             </div>
+
+            {/* 1c. Tutor Entered Fees & 80% Net Take-Home Earnings Breakdown */}
+            {(() => {
+              const u = activeUserData || user || {};
+              const fee1to7 = Number((u as any).feeClass1to7) || Number((u as any).customFeeSchedule?.cbse?.class1to7) || Number((u as any).feePrimary1to5) || 1500;
+              const fee8to10 = Number((u as any).feeClass8to10) || Number((u as any).customFeeSchedule?.cbse?.class8to10) || Number((u as any).feeMiddle6to8) || 2000;
+              const fee11to12 = Number((u as any).feeClass11to12) || Number((u as any).customFeeSchedule?.cbse?.class11to12) || Number((u as any).feeSenior11to12) || 3000;
+              const hourly = Number((u as any).hourlyCharges) || Number((u as any).hourlyRate) || Number((u as any).hourlyFee) || 100;
+
+              const feeTiers = [
+                {
+                  label: 'Class 1st to 7th (CBSE/ICSE)',
+                  type: 'All Subjects Package',
+                  gross: fee1to7,
+                  unit: 'mo'
+                },
+                {
+                  label: 'Class 8th to 10th (Secondary)',
+                  type: 'Per Subject / Monthly',
+                  gross: fee8to10,
+                  unit: 'mo'
+                },
+                {
+                  label: 'Class 11th & 12th (Senior)',
+                  type: 'Per Subject / Monthly',
+                  gross: fee11to12,
+                  unit: 'mo'
+                },
+                {
+                  label: 'Hourly Home Tuition',
+                  type: '1-on-1 Hourly Class',
+                  gross: hourly,
+                  unit: 'hr'
+                }
+              ];
+
+              return (
+                <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                    <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
+                      <IndianRupee className="w-4 h-4 text-emerald-600" />
+                      <span>Your Profile Fee Rates &amp; 80% Net Take-Home Pay</span>
+                    </div>
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      80% Net Accrual
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-500">
+                    Below is your tuition pricing schedule entered during your profile update. For every student booked, you receive <strong>80% net take-home remuneration</strong> with 20% platform service fee accounted for.
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+                    {feeTiers.map((tier, idx) => {
+                      const platformFee = Math.round(tier.gross * 0.2);
+                      const netPay = Math.round(tier.gross * 0.8);
+                      return (
+                        <div
+                          key={idx}
+                          className="p-3.5 rounded-xl border border-slate-200/90 bg-slate-50/60 hover:bg-slate-50 transition-all flex flex-col justify-between space-y-2"
+                        >
+                          <div>
+                            <span className="text-[11px] font-bold text-slate-800 block leading-tight">
+                              {tier.label}
+                            </span>
+                            <span className="text-[10px] text-slate-400 block mt-0.5">
+                              {tier.type}
+                            </span>
+                          </div>
+
+                          <div className="space-y-1 pt-1 border-t border-slate-200/70">
+                            <div className="flex items-center justify-between text-xs text-slate-600">
+                              <span>Gross Fee (100%):</span>
+                              <strong className="text-slate-800">₹{tier.gross}/{tier.unit}</strong>
+                            </div>
+                            <div className="flex items-center justify-between text-[11px] text-rose-600">
+                              <span>Platform Fee (20%):</span>
+                              <span>- ₹{platformFee}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-xs font-bold text-emerald-700 pt-1 border-t border-emerald-100 bg-emerald-50/70 -mx-3.5 -mb-3.5 p-2 rounded-b-xl">
+                              <span>Your Take-Home (80%):</span>
+                              <span>₹{netPay}/{tier.unit}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* 2. Assigned Students Section (Deduplicated with real-time student details & attendance) */}
             <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs space-y-4">

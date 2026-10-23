@@ -832,9 +832,9 @@ export async function registerTeacherInFirebase(data: TeacherRegistrationData): 
 
 /**
  * Save complete teacher profile data into Firestore
- * - Saves complete details into 'complete_tutors' collection
- * - Removes from 'tutors_requests' collection as profile is completed
- * - Syncs with 'teachers' collection
+ * - Saves submitted tutor details into 'tutors_requests' collection for Admin verification
+ * - Keeps 'teachers' collection updated with status 'pending' (unless already approved)
+ * - Tutors ONLY move to 'complete_tutors' when Admin explicitly reviews and clicks Accept!
  */
 export async function updateTeacherProfileInFirestore(uid: string, profileData: any): Promise<void> {
   const teacherRef = doc(db, "teachers", uid);
@@ -849,6 +849,14 @@ export async function updateTeacherProfileInFirestore(uid: string, profileData: 
     profileData.availableTimeSlots ||
     ['05:00 PM - 06:00 PM', '06:00 PM - 07:00 PM'];
 
+  // Check if this tutor was already approved previously by Admin
+  const isAlreadyApproved = Boolean(
+    profileData.isApproved === true ||
+    profileData.status === 'approved' ||
+    profileData.verified === true ||
+    isTeacherApprovedInRegistry(uid, profileData.id, profileData.email, profileData.phone)
+  );
+
   const completePayload = removeUndefinedFields({
     ...profileData,
     uid,
@@ -856,36 +864,47 @@ export async function updateTeacherProfileInFirestore(uid: string, profileData: 
     profileCompleted: true,
     feeAmount,
     monthlyFee: Number(profileData.monthlyFee) || feeAmount,
-    hourlyRate: Number(profileData.hourlyRate) || 400,
+    hourlyRate: Number(profileData.hourlyRate) || 100,
     availableTimings,
     selectedTimings: profileData.selectedTimings || availableTimings,
     assignedParentName: profileData.assignedParentName || '',
     assignedParents: profileData.assignedParents || [],
     assignedStudents: profileData.assignedStudents || [],
-    status: profileData.status || 'approved',
+    status: isAlreadyApproved ? 'approved' : 'pending',
+    isApproved: isAlreadyApproved,
+    verified: isAlreadyApproved,
+    kycStatus: isAlreadyApproved ? ('approved' as const) : ('submitted' as const),
+    verificationStatus: isAlreadyApproved ? 'Verified Genuine Tutor' : 'Pending Verification',
     updatedAt: new Date().toISOString()
   });
 
-  // 1. Save to complete_tutors collection in Firestore
+  // 1. Keep teachers collection updated
   try {
-    const completeDocRef = doc(db, "complete_tutors", uid);
-    await setDoc(completeDocRef, completePayload, { merge: true });
+    await setDoc(teacherRef, completePayload, { merge: true });
   } catch (err) {
-    console.warn('complete_tutors save notice:', err);
+    console.warn('teachers collection write notice:', err);
   }
 
-  // 2. Remove from tutors_requests collection since profile is completed
-  try {
-    const tutorRequestRef = doc(db, "tutors_requests", uid);
-    await deleteDoc(tutorRequestRef);
-  } catch (err) {
-    console.warn('tutors_requests delete notice:', err);
+  // 2. Store in tutors_requests collection for admin review (if not yet approved)
+  if (!isAlreadyApproved) {
+    try {
+      const tutorRequestRef = doc(db, "tutors_requests", uid);
+      await setDoc(tutorRequestRef, completePayload, { merge: true });
+      console.log(`[Firestore] Profile submitted and waiting in tutors_requests for admin review: ${completePayload.name || uid}`);
+    } catch (err) {
+      console.warn('tutors_requests save notice:', err);
+    }
+  } else {
+    // If already approved, sync with complete_tutors (Tutors Directory)
+    try {
+      const completeDocRef = doc(db, "complete_tutors", uid);
+      await setDoc(completeDocRef, completePayload, { merge: true });
+    } catch (err) {
+      console.warn('complete_tutors save notice:', err);
+    }
   }
 
-  // 3. Keep teachers collection updated
-  await setDoc(teacherRef, completePayload, { merge: true });
-
-  // 4. Sync with server persistent database
+  // 3. Sync with server persistent database
   try {
     await fetch('/api/teachers/register-location', {
       method: 'POST',
@@ -2337,9 +2356,45 @@ export function subscribeToRealtimeTeachers(onTeachersUpdate: (teachers: Tutor[]
   }
 }
 
+export interface FirestoreNoticeInfo {
+  code: string;
+  message: string;
+  timestamp: string;
+  collection?: string;
+}
+
+export let lastFirestoreNotice: FirestoreNoticeInfo | null = null;
+const noticeListeners: ((notice: FirestoreNoticeInfo | null) => void)[] = [];
+
+export function recordFirestoreNotice(err: any, colName?: string) {
+  if (!err) return;
+  const code = err.code || 'unknown';
+  const message = err.message || String(err);
+  lastFirestoreNotice = {
+    code,
+    message,
+    timestamp: new Date().toISOString(),
+    collection: colName
+  };
+  noticeListeners.forEach((fn) => {
+    try {
+      fn(lastFirestoreNotice);
+    } catch {}
+  });
+}
+
+export function subscribeToFirestoreNotices(cb: (notice: FirestoreNoticeInfo | null) => void): () => void {
+  noticeListeners.push(cb);
+  if (lastFirestoreNotice) cb(lastFirestoreNotice);
+  return () => {
+    const idx = noticeListeners.indexOf(cb);
+    if (idx > -1) noticeListeners.splice(idx, 1);
+  };
+}
+
 /**
  * Admin Real-time listener for ALL registered teachers (pending, approved, rejected)
- * Listens directly to Firestore collection 'teachers' as the primary source of truth.
+ * Listens across all tutor collection variations: teachers, complete_tutors, confirm_tutors_details, tutors_requests, etc.
  */
 export function subscribeToAllTeachersForAdmin(onTeachersUpdate: (teachers: Tutor[]) => void): () => void {
   const parseFirestoreTeacher = (docId: string, data: any): Tutor => {
@@ -2509,51 +2564,62 @@ export function subscribeToAllTeachersForAdmin(onTeachersUpdate: (teachers: Tuto
 
   const unsubscribers: (() => void)[] = [];
 
-  // 2. Real-time Firestore listener for 'teachers'
-  try {
-    const teachersCol = collection(db, "teachers");
-    const unsub = onSnapshot(
-      teachersCol,
-      (snapshot) => handleSnapshot(snapshot),
-      (err) => {
-        console.warn("Firestore admin teachers snapshot notice:", err);
-        emit();
-      }
-    );
-    unsubscribers.push(unsub);
-  } catch (err) {
-    console.warn("Firestore admin teachers listener error:", err);
-  }
+  // Listen to all possible collection names in Firestore for tutors
+  const confirmedCollections = ['complete_tutors', 'confirm_tutors_details', 'confirm_tutors', 'confirmed_tutors'];
+  const generalTeacherCollections = ['teachers', 'tutors'];
+  const requestCollections = ['tutors_requests', 'tutor_requests', 'tutor_request'];
 
-  // 3. Real-time Firestore listener for 'complete_tutors'
-  try {
-    const completeCol = collection(db, "complete_tutors");
-    const unsub = onSnapshot(
-      completeCol,
-      (snapshot) => handleSnapshot(snapshot, true),
-      (err) => {
-        console.warn("Firestore complete_tutors snapshot notice:", err);
-      }
-    );
-    unsubscribers.push(unsub);
-  } catch (err) {
-    console.warn("Firestore complete_tutors listener error:", err);
-  }
+  confirmedCollections.forEach((colName) => {
+    try {
+      const colRef = collection(db, colName);
+      const unsub = onSnapshot(
+        colRef,
+        (snapshot) => handleSnapshot(snapshot, true),
+        (err) => {
+          console.warn(`Firestore ${colName} notice:`, err);
+          recordFirestoreNotice(err);
+        }
+      );
+      unsubscribers.push(unsub);
+    } catch (e) {
+      console.warn(`Firestore ${colName} listener setup notice:`, e);
+    }
+  });
 
-  // 4. Real-time Firestore listener for 'tutors_requests'
-  try {
-    const requestsCol = collection(db, "tutors_requests");
-    const unsub = onSnapshot(
-      requestsCol,
-      (snapshot) => handleSnapshot(snapshot),
-      (err) => {
-        console.warn("Firestore tutors_requests snapshot notice:", err);
-      }
-    );
-    unsubscribers.push(unsub);
-  } catch (err) {
-    console.warn("Firestore tutors_requests listener error:", err);
-  }
+  generalTeacherCollections.forEach((colName) => {
+    try {
+      const colRef = collection(db, colName);
+      const unsub = onSnapshot(
+        colRef,
+        (snapshot) => handleSnapshot(snapshot),
+        (err) => {
+          console.warn(`Firestore ${colName} notice:`, err);
+          recordFirestoreNotice(err);
+          emit();
+        }
+      );
+      unsubscribers.push(unsub);
+    } catch (e) {
+      console.warn(`Firestore ${colName} listener setup notice:`, e);
+    }
+  });
+
+  requestCollections.forEach((colName) => {
+    try {
+      const colRef = collection(db, colName);
+      const unsub = onSnapshot(
+        colRef,
+        (snapshot) => handleSnapshot(snapshot),
+        (err) => {
+          console.warn(`Firestore ${colName} notice:`, err);
+          recordFirestoreNotice(err);
+        }
+      );
+      unsubscribers.push(unsub);
+    } catch (e) {
+      console.warn(`Firestore ${colName} listener setup notice:`, e);
+    }
+  });
 
   return () => {
     unsubscribers.forEach((fn) => {
@@ -2715,41 +2781,65 @@ export function subscribeToAllParentsForAdmin(onParentsUpdate: (parents: AppUser
       console.warn("Server admin parents fetch notice:", err);
     });
 
-  // 2. Subscribe exclusively in real-time to Firestore 'parents' collection
-  let unsubParents: (() => void) | null = null;
-  try {
-    const parentsCol = collection(db, "parents");
-    unsubParents = onSnapshot(
-      parentsCol,
-      (snapshot) => {
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          if (
-            data &&
-            (data.role === 'parent' || !data.role) &&
-            data.role !== 'admin' &&
-            data.role !== 'teacher' &&
-            !isFakeParent(data) &&
-            !isFakeParent({ uid: docSnap.id })
-          ) {
-            const parsed = parseFirestoreParent(docSnap.id, data);
-            const key = (parsed.uid || parsed.email || '').trim().toLowerCase();
-            if (key) parentsMap.set(key, parsed);
-          }
-        });
-        emit();
-      },
-      (err) => {
-        console.warn("Firestore 'parents' collection snapshot notice:", err);
-        emit();
-      }
-    );
-  } catch (err) {
-    console.warn("Firestore 'parents' listener init error:", err);
-  }
+  // 2. Subscribe in real-time to Firestore parent collections ('parents', 'parent', 'registered_parents', 'users', etc.)
+  const unsubscribers: (() => void)[] = [];
+  const parentCollections = ['parents', 'parent', 'registered_parents', 'users', 'parent_requests', 'parents_requests'];
+
+  parentCollections.forEach((colName) => {
+    try {
+      const pCol = collection(db, colName);
+      const unsub = onSnapshot(
+        pCol,
+        (snapshot) => {
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            if (!data) return;
+
+            if (colName === 'users') {
+              const isParent = Boolean(
+                data.role === 'parent' ||
+                data.userType === 'parent' ||
+                (!data.role && (data.childName || data.studentName || data.children || data.childGrade || data.childSchool || data.course))
+              );
+              if (isParent && data.role !== 'admin' && data.role !== 'teacher' && !isFakeParent(data) && !isFakeParent({ uid: docSnap.id })) {
+                const parsed = parseFirestoreParent(docSnap.id, data);
+                const key = (parsed.uid || parsed.email || '').trim().toLowerCase();
+                if (key) parentsMap.set(key, parsed);
+              }
+            } else {
+              if (
+                (data.role === 'parent' || !data.role) &&
+                data.role !== 'admin' &&
+                data.role !== 'teacher' &&
+                !isFakeParent(data) &&
+                !isFakeParent({ uid: docSnap.id })
+              ) {
+                const parsed = parseFirestoreParent(docSnap.id, data);
+                const key = (parsed.uid || parsed.email || '').trim().toLowerCase();
+                if (key) parentsMap.set(key, parsed);
+              }
+            }
+          });
+          emit();
+        },
+        (err) => {
+          console.warn(`Firestore '${colName}' collection snapshot notice:`, err);
+          recordFirestoreNotice(err, colName);
+          emit();
+        }
+      );
+      unsubscribers.push(unsub);
+    } catch (err) {
+      console.warn(`Firestore '${colName}' listener init error:`, err);
+    }
+  });
 
   return () => {
-    if (unsubParents) unsubParents();
+    unsubscribers.forEach((fn) => {
+      try {
+        fn();
+      } catch {}
+    });
   };
 }
 
@@ -2923,31 +3013,38 @@ export async function adminVerifyTutorInDatabase(
         updatedAt: new Date().toISOString()
       };
 
+      // 1. Update Firestore doc directly with new verification status
+      const rawUid = tutorId.replace(/^fb_teacher_/, '');
+      const tSnap = await getDoc(tutorRef).catch(() => null);
+      const existingData = tSnap && tSnap.exists() ? tSnap.data() : {};
+
       await setDoc(tutorRef, approvalUpdates, { merge: true }).catch((err) => console.warn('Firestore tutor verify notice:', err));
-      await setDoc(doc(db, "complete_tutors", tutorId), approvalUpdates, { merge: true }).catch(() => {});
+      
+      // Save full profile to complete_tutors so Tutors Directory has complete data
+      await setDoc(doc(db, "complete_tutors", tutorId), { ...existingData, ...approvalUpdates, id: tutorId, uid: rawUid || tutorId }, { merge: true }).catch(() => {});
+      if (rawUid && rawUid !== tutorId) {
+        await setDoc(doc(db, "complete_tutors", rawUid), { ...existingData, ...approvalUpdates, id: rawUid, uid: rawUid }, { merge: true }).catch(() => {});
+      }
+
+      // Explicitly remove this approved tutor from tutors_requests collection
+      await deleteDoc(doc(db, "tutors_requests", tutorId)).catch(() => {});
+      if (rawUid) {
+        await deleteDoc(doc(db, "tutors_requests", rawUid)).catch(() => {});
+      }
 
       // Cross-sync if teacher doc has email or linked uid
       try {
-        const rawUid = tutorId.replace(/^fb_teacher_/, '');
         if (rawUid !== tutorId) {
           await setDoc(doc(db, "teachers", rawUid), approvalUpdates, { merge: true }).catch(() => {});
         } else {
           await setDoc(doc(db, "teachers", `fb_teacher_${rawUid}`), approvalUpdates, { merge: true }).catch(() => {});
         }
 
-        const tSnap = await getDoc(tutorRef).catch(() => null);
-        let teacherEmail = '';
-        let teacherPhone = '';
-        let teacherUid = '';
-
-        if (tSnap && tSnap.exists()) {
-          const tData = tSnap.data();
-          teacherEmail = tData.email || '';
-          teacherPhone = tData.phone || '';
-          teacherUid = tData.uid || '';
-          if (tData.uid && tData.uid !== tutorId) {
-            await setDoc(doc(db, "teachers", tData.uid), approvalUpdates, { merge: true }).catch(() => {});
-          }
+        let teacherEmail = existingData.email || '';
+        let teacherPhone = existingData.phone || '';
+        let teacherUid = existingData.uid || '';
+        if (existingData.uid && existingData.uid !== tutorId) {
+          await setDoc(doc(db, "teachers", existingData.uid), approvalUpdates, { merge: true }).catch(() => {});
         }
 
         // Query teachers collection by email for full consistency
@@ -2988,6 +3085,7 @@ export async function adminVerifyTutorInDatabase(
         console.warn('Teacher cross-sync notice:', e);
       }
     } else {
+      const rawUid = tutorId.replace(/^fb_teacher_/, '');
       const rejectUpdates = {
         status: 'rejected',
         isApproved: false,
@@ -3001,9 +3099,14 @@ export async function adminVerifyTutorInDatabase(
 
       await setDoc(tutorRef, rejectUpdates, { merge: true }).catch((err) => console.warn('Firestore tutor reject notice:', err));
       await deleteDoc(doc(db, "complete_tutors", tutorId)).catch(() => {});
+      if (rawUid) await deleteDoc(doc(db, "complete_tutors", rawUid)).catch(() => {});
+
+      // Keep in tutors_requests marked as rejected
+      await setDoc(doc(db, "tutors_requests", tutorId), rejectUpdates, { merge: true }).catch(() => {});
+      if (rawUid) await setDoc(doc(db, "tutors_requests", rawUid), rejectUpdates, { merge: true }).catch(() => {});
 
       unmarkTeacherApprovedInRegistry(tutorId);
-      unmarkTeacherApprovedInRegistry(tutorId.replace(/^fb_teacher_/, ''));
+      unmarkTeacherApprovedInRegistry(rawUid);
     }
 
     // 2. Also notify Backend Express Server to keep cache synchronized
@@ -3811,7 +3914,21 @@ export async function adminDeclineTutorBooking(
   reason?: string
 ): Promise<{ success: boolean; message: string; booking?: any }> {
   try {
-    // 1. Remove from 'incoming_bookings' collection (once declined, removed from database)
+    const effectiveReason = reason || 'Selected time slot is already fully occupied.';
+
+    // 1. Read existing booking data to identify parent & tutor
+    const bookingRef = doc(db, "tutor_bookings", bookingId);
+    let bookingData: any = null;
+    try {
+      const snap = await getDoc(bookingRef);
+      if (snap.exists()) {
+        bookingData = snap.data();
+      }
+    } catch (e) {
+      console.warn('Booking read notice on decline:', e);
+    }
+
+    // 2. Remove from 'incoming_bookings' collection (once declined, removed from database)
     try {
       const incomingBookingRef = doc(db, "incoming_bookings", bookingId);
       await deleteDoc(incomingBookingRef);
@@ -3819,20 +3936,80 @@ export async function adminDeclineTutorBooking(
       console.warn('incoming_bookings delete on decline notice:', delErr);
     }
 
-    // Also update Firestore doc in legacy 'tutor_bookings'
-    const bookingRef = doc(db, "tutor_bookings", bookingId);
+    // 3. Update Firestore doc in 'tutor_bookings' with declined reaction
     await updateDoc(bookingRef, {
       status: 'declined',
-      declineReason: reason || 'Selected time slot is already fully occupied.',
+      declineReason: effectiveReason,
       declinedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }).catch((err) => console.warn('Firestore booking decline notice:', err));
 
-    // 2. Update Backend Express Server
+    // 4. Update parent doc in 'parents' collection so their profile reflects the reaction
+    const parentDocKey = bookingData?.parentUid || (bookingData?.parentPhone ? `parent_${bookingData.parentPhone.replace(/\D/g, '')}` : null);
+    if (parentDocKey) {
+      try {
+        const pRef = doc(db, "parents", parentDocKey);
+        const pSnap = await getDoc(pRef);
+        if (pSnap.exists()) {
+          const pData = pSnap.data();
+          const existingBooked = Array.isArray(pData.bookedTutors) ? pData.bookedTutors : [];
+          let found = false;
+          const updatedBooked = existingBooked.map((b: any) => {
+            if (b.id === bookingId || b.bookingId === bookingId) {
+              found = true;
+              return {
+                ...b,
+                status: 'declined',
+                declineReason: effectiveReason,
+                declinedAt: new Date().toISOString()
+              };
+            }
+            return b;
+          });
+          if (!found && bookingData) {
+            updatedBooked.push({
+              id: bookingId,
+              bookingId,
+              tutorId: bookingData.requestedTutorId,
+              tutorName: bookingData.requestedTutorName,
+              status: 'declined',
+              declineReason: effectiveReason,
+              declinedAt: new Date().toISOString()
+            });
+          }
+          await setDoc(pRef, {
+            bookedTutors: updatedBooked,
+            updatedAt: new Date().toISOString()
+          }, { merge: true });
+        }
+      } catch (err) {
+        console.warn('Parent record update on decline notice:', err);
+      }
+    }
+
+    // 5. Release any unconfirmed pending slot on teacher doc
+    if (bookingData?.requestedTutorId) {
+      try {
+        const tRef = doc(db, "teachers", bookingData.requestedTutorId);
+        const tSnap = await getDoc(tRef);
+        if (tSnap.exists()) {
+          const tData = tSnap.data();
+          const remainingStudents = (tData.assignedStudents || []).filter(
+            (s: any) => s.bookingId !== bookingId && s.id !== bookingId && s.id !== `std-${bookingId}`
+          );
+          await updateDoc(tRef, {
+            assignedStudents: remainingStudents,
+            updatedAt: new Date().toISOString()
+          }).catch(() => {});
+        }
+      } catch (te) {}
+    }
+
+    // 6. Update Backend Express Server
     const res = await fetch(`/api/admin/bookings/${encodeURIComponent(bookingId)}/decline`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reason })
+      body: JSON.stringify({ reason: effectiveReason })
     });
 
     if (res.ok) {
@@ -4409,109 +4586,198 @@ export async function deleteHeroBannerFromFirestore(id: string): Promise<void> {
 }
 
 /**
- * 1. Incoming Bookings: Real-time listener specifically for 'incoming_bookings' collection
+ * 1. Incoming Bookings: Real-time listener across 'incoming_bookings', 'bookings', 'tutor_bookings'
  */
 export function subscribeToRealtimeIncomingBookings(
   onUpdate: (bookings: any[]) => void
 ): () => void {
-  try {
-    const col = collection(db, "incoming_bookings");
-    const unsub = onSnapshot(
-      col,
-      (snapshot) => {
-        const list: any[] = [];
-        snapshot.forEach((d) => {
-          list.push({ id: d.id, ...d.data() });
-        });
-        list.sort(
-          (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-        );
-        onUpdate(list);
-      },
-      (err) => {
-        console.warn("Firestore incoming_bookings listener notice:", err);
-      }
+  const bookingsMap = new Map<string, any>();
+  const emit = () => {
+    const list = Array.from(bookingsMap.values()).sort(
+      (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
     );
-    return unsub;
-  } catch (err) {
-    console.warn("Firestore incoming_bookings setup error:", err);
-    return () => {};
-  }
+    onUpdate(list);
+  };
+
+  const unsubscribers: (() => void)[] = [];
+  const colNames = ['incoming_bookings', 'bookings', 'tutor_bookings', 'incomingbookings'];
+
+  colNames.forEach((colName) => {
+    try {
+      const col = collection(db, colName);
+      const unsub = onSnapshot(
+        col,
+        (snapshot) => {
+          snapshot.forEach((d) => {
+            const data = d.data();
+            bookingsMap.set(d.id, { id: d.id, ...data });
+          });
+          emit();
+        },
+        (err) => {
+          console.warn(`Firestore ${colName} listener notice:`, err);
+          recordFirestoreNotice(err, colName);
+        }
+      );
+      unsubscribers.push(unsub);
+    } catch (err) {
+      console.warn(`Firestore ${colName} setup error:`, err);
+    }
+  });
+
+  return () => {
+    unsubscribers.forEach((fn) => {
+      try {
+        fn();
+      } catch {}
+    });
+  };
 }
 
 /**
- * 3. Tutors Request Collection: Real-time listener for tutors who registered pending profile completion
+ * 3. Tutors Request Collection: Real-time listener for tutors who registered/updated profile pending admin approval
+ * Listens to: 'tutors_requests', 'tutor_requests', 'tutor_request', and 'teachers' (pending approval)
  */
 export function subscribeToTutorsRequests(
   onUpdate: (requests: any[]) => void
 ): () => void {
-  try {
-    const col = collection(db, "tutors_requests");
-    const unsub = onSnapshot(
-      col,
-      (snapshot) => {
-        const list: any[] = [];
-        snapshot.forEach((d) => {
-          list.push({ id: d.id, ...d.data() });
-        });
-        list.sort(
-          (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-        );
-        onUpdate(list);
-      },
-      (err) => {
-        console.warn("Firestore tutors_requests listener notice:", err);
-      }
+  const requestsMap = new Map<string, any>();
+  const emit = () => {
+    const list = Array.from(requestsMap.values()).filter((t) => {
+      // Must NOT be approved yet!
+      return !(t.isApproved === true || t.status === 'approved');
+    }).sort(
+      (a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime()
     );
-    return unsub;
-  } catch (err) {
-    console.warn("Firestore tutors_requests setup error:", err);
-    return () => {};
-  }
+    onUpdate(list);
+  };
+
+  const unsubscribers: (() => void)[] = [];
+  const colNames = ['tutors_requests', 'tutor_requests', 'tutor_request', 'teachers'];
+
+  colNames.forEach((colName) => {
+    try {
+      const col = collection(db, colName);
+      const unsub = onSnapshot(
+        col,
+        (snapshot) => {
+          snapshot.forEach((d) => {
+            const data = d.data();
+            if (!data) return;
+
+            // If already approved, do not show in pending requests
+            const isApproved = Boolean(data.isApproved === true || data.status === 'approved');
+            if (isApproved) {
+              requestsMap.delete(d.id);
+              return;
+            }
+
+            if (colName === 'teachers' && data.role && data.role !== 'teacher') return;
+
+            requestsMap.set(d.id, { id: d.id, ...data });
+          });
+          emit();
+        },
+        (err) => {
+          console.warn(`Firestore ${colName} listener notice:`, err);
+          recordFirestoreNotice(err, colName);
+        }
+      );
+      unsubscribers.push(unsub);
+    } catch (err) {
+      console.warn(`Firestore ${colName} setup error:`, err);
+    }
+  });
+
+  return () => {
+    unsubscribers.forEach((fn) => {
+      try {
+        fn();
+      } catch {}
+    });
+  };
 }
 
 /**
- * 4. Complete Tutors Collection: Real-time listener for profile completed tutors
- * Stored with available timings, fee amount, and assigned parent name
+ * 4. Confirm Tutors Details / Complete Tutors: Real-time listener for profile completed VERIFIED educators
+ * STRICT RULE: Only accepted tutors (isApproved === true || status === 'approved') are in Tutors Directory!
  */
 export function subscribeToCompleteTutors(
   onUpdate: (tutors: any[]) => void
 ): () => void {
-  try {
-    const col = collection(db, "complete_tutors");
-    const unsub = onSnapshot(
-      col,
-      (snapshot) => {
-        const list: any[] = [];
-        snapshot.forEach((d) => {
-          const data = d.data();
-          const feeAmount =
-            Number(data.feeAmount) ||
-            Number(data.monthlyFee) ||
-            (Number(data.hourlyRate) ? Number(data.hourlyRate) * 30 : 3500);
-
-          list.push({
-            id: d.id,
-            ...data,
-            feeAmount,
-            availableTimings: data.availableTimings || data.selectedTimings || ['05:00 PM - 06:00 PM', '06:00 PM - 07:00 PM'],
-            assignedParentName: data.assignedParentName || (Array.isArray(data.assignedParents) && data.assignedParents[0]?.parentName) || ''
-          });
-        });
-        list.sort(
-          (a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime()
-        );
-        onUpdate(list);
-      },
-      (err) => {
-        console.warn("Firestore complete_tutors listener notice:", err);
-      }
+  const tutorsMap = new Map<string, any>();
+  const emit = () => {
+    const list = Array.from(tutorsMap.values()).filter((t) => {
+      return Boolean(t.isApproved === true || t.status === 'approved' || (t.verified === true && t.status !== 'rejected'));
+    }).sort(
+      (a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime()
     );
-    return unsub;
-  } catch (err) {
-    console.warn("Firestore complete_tutors setup error:", err);
-    return () => {};
-  }
+    onUpdate(list);
+  };
+
+  const unsubscribers: (() => void)[] = [];
+  const colNames = [
+    'complete_tutors',
+    'confirm_tutors_details',
+    'confirm_tutors',
+    'confirmed_tutors',
+    'teachers'
+  ];
+
+  colNames.forEach((colName) => {
+    try {
+      const col = collection(db, colName);
+      const unsub = onSnapshot(
+        col,
+        (snapshot) => {
+          snapshot.forEach((d) => {
+            const data = d.data();
+            if (!data) return;
+
+            // STRICT RULE: Only include approved tutors in Tutors Directory!
+            const isApproved = Boolean(
+              data.isApproved === true ||
+              data.status === 'approved' ||
+              (data.verified === true && data.status !== 'pending' && data.status !== 'rejected')
+            );
+            if (!isApproved) {
+              tutorsMap.delete(d.id);
+              return;
+            }
+
+            const feeAmount =
+              Number(data.feeAmount) ||
+              Number(data.monthlyFee) ||
+              (Number(data.hourlyRate) ? Number(data.hourlyRate) * 30 : 3500);
+
+            tutorsMap.set(d.id, {
+              id: d.id,
+              ...data,
+              feeAmount,
+              availableTimings: data.availableTimings || data.selectedTimings || ['05:00 PM - 06:00 PM', '06:00 PM - 07:00 PM'],
+              assignedParentName: data.assignedParentName || (Array.isArray(data.assignedParents) && data.assignedParents[0]?.parentName) || ''
+            });
+          });
+          emit();
+        },
+        (err) => {
+          console.warn(`Firestore ${colName} listener notice:`, err);
+          recordFirestoreNotice(err, colName);
+        }
+      );
+      unsubscribers.push(unsub);
+    } catch (err) {
+      console.warn(`Firestore ${colName} setup error:`, err);
+    }
+  });
+
+  return () => {
+    unsubscribers.forEach((fn) => {
+      try {
+        fn();
+      } catch {}
+    });
+  };
 }
 
 /**

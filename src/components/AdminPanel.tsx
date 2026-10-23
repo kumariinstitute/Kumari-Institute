@@ -102,8 +102,13 @@ import {
   updateHeroBannerInFirestore,
   deleteHeroBannerFromFirestore,
   FirestoreHeroBanner,
-  AppUserProfile
+  AppUserProfile,
+  subscribeToFirestoreNotices,
+  lastFirestoreNotice,
+  FirestoreNoticeInfo
 } from '../services/firebaseAuth';
+import { collection, getDocs } from 'firebase/firestore';
+import { db, FIRESTORE_DATABASE_ID } from '../lib/firebase';
 import {
   TutorWithdrawalRequest,
   subscribeToAllWithdrawalRequests,
@@ -164,7 +169,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     | 'tutor_reviews'
     | 'registered_directory'
     | 'tutor_withdrawals'
+    | 'confirm_tutors_details'
   >('incoming_bookings');
+
+  // Live Cloud Firestore Notice & Sync Diagnostics State
+  const [firestoreNotice, setFirestoreNotice] = useState<FirestoreNoticeInfo | null>(lastFirestoreNotice);
+  const [isTestingCloud, setIsTestingCloud] = useState<boolean>(false);
+  const [cloudTestResult, setCloudTestResult] = useState<Record<string, { ok: boolean; count?: number; error?: string }> | null>(null);
+  const [isCloudBannerDismissed, setIsCloudBannerDismissed] = useState<boolean>(false);
+  const [isRulesCopied, setIsRulesCopied] = useState<boolean>(false);
 
   // Un-profile updated tutors search state
   const [unprofileSearch, setUnprofileSearch] = useState<string>('');
@@ -559,6 +572,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setIsLoadingReceivedFees(false);
     });
 
+    // Cloud Firestore notice listener
+    const unsubNotices = subscribeToFirestoreNotices((notice) => {
+      setFirestoreNotice(notice);
+    });
+
     return () => {
       unsubTutors();
       unsubIncomingBookings();
@@ -577,8 +595,48 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       unsubWithdrawals();
       unsubHeroBanners();
       unsubReceivedFees();
+      unsubNotices();
     };
   }, []);
+
+  // Test direct Cloud Firestore fetch across all collections
+  const handleTestDirectCloudFetch = async () => {
+    setIsTestingCloud(true);
+    setCloudTestResult(null);
+    try {
+      const results: Record<string, { ok: boolean; count?: number; error?: string }> = {};
+      const testCols = [
+        'parents',
+        'tutors_requests',
+        'confirm_tutors_details',
+        'complete_tutors',
+        'incoming_bookings',
+        'received_fees',
+        'withdrawal_notices'
+      ];
+
+      for (const colName of testCols) {
+        try {
+          const snap = await getDocs(collection(db, colName));
+          results[colName] = { ok: true, count: snap.size };
+        } catch (e: any) {
+          results[colName] = { ok: false, error: e?.code || e?.message || 'permission-denied' };
+        }
+      }
+
+      setCloudTestResult(results);
+      const permDenied = Object.values(results).some((r) => r.error === 'permission-denied');
+      if (permDenied) {
+        showToast('error', '⚠️ Firestore kumari-db returned permission-denied. Rules require update in Firebase Console.');
+      } else {
+        showToast('success', '✓ Direct Cloud Firestore query succeeded! Collections verified.');
+      }
+    } catch (err: any) {
+      showToast('error', err?.message || 'Cloud Firestore test query failed.');
+    } finally {
+      setIsTestingCloud(false);
+    }
+  };
 
   const fetchAdminHeroBanners = async () => {
     setIsLoadingHeroBanners(true);
@@ -2029,6 +2087,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               {/* 2. Registered Parents */}
               <button
                 type="button"
+                id="admin-tab-parents"
                 onClick={() => {
                   setActiveTab('parents');
                   setDirectoryRoleFilter('parents');
@@ -2042,7 +2101,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <Users className="w-4 h-4 shrink-0 text-indigo-300" />
-                  <span className="truncate">2. Parents Directory</span>
+                  <span className="truncate">2. Parents (parents)</span>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   {unassignedParentsCount > 0 && (
@@ -2063,6 +2122,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               {/* 3. Tutors Requests */}
               <button
                 type="button"
+                id="admin-tab-tutors-requests"
                 onClick={() => {
                   setActiveTab('tutors_requests');
                   setTutorFilter('pending');
@@ -2076,7 +2136,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <UserPlus className="w-4 h-4 shrink-0" />
-                  <span className="truncate">3. Tutors Request</span>
+                  <span className="truncate">3. Tutors Requests (tutors_requests)</span>
                 </div>
                 {pendingTutorsCount > 0 && (
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
@@ -2114,25 +2174,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </span>
               </button>
 
-              {/* 4. Tutors Directory */}
+              {/* 4. Confirm Tutors Details */}
               <button
                 type="button"
+                id="admin-tab-confirm-tutors-details"
                 onClick={() => {
-                  setActiveTab('tutors_directory');
+                  setActiveTab('confirm_tutors_details');
                   setIsMobileNavOpen(false);
                 }}
                 className={`w-full px-3 py-2.5 rounded-xl font-bold flex items-center justify-between transition-all cursor-pointer text-left ${
-                  activeTab === 'tutors_directory' || activeTab === 'complete_tutors' || activeTab === 'assigned_tutors'
+                  activeTab === 'confirm_tutors_details' || activeTab === 'tutors_directory' || activeTab === 'complete_tutors' || activeTab === 'assigned_tutors'
                     ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
                     : 'text-slate-300 hover:text-white hover:bg-slate-800/80'
                 }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <GraduationCap className="w-4 h-4 shrink-0" />
-                  <span className="truncate">4. Tutors Directory</span>
+                  <span className="truncate">4. Confirm Tutors Details</span>
                 </div>
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
-                  activeTab === 'tutors_directory' || activeTab === 'complete_tutors' || activeTab === 'assigned_tutors'
+                  activeTab === 'confirm_tutors_details' || activeTab === 'tutors_directory' || activeTab === 'complete_tutors' || activeTab === 'assigned_tutors'
                     ? 'bg-slate-950 text-amber-300'
                     : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                 }`}>
@@ -2410,13 +2471,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   {activeTab === 'incoming_bookings' || activeTab === 'bookings'
                     ? '1. Incoming Bookings (Cloud Firestore)'
                     : activeTab === 'parents' || activeTab === 'registered_directory'
-                    ? '2. Parents Directory (Registered Parents)'
+                    ? '2. Parents Directory (parents)'
                     : activeTab === 'tutors_requests' || activeTab === 'tutors'
-                    ? '3. Tutors Request Collection (Pending Verification)'
+                    ? '3. Tutors Requests (tutors_requests / tutor_requests)'
                     : activeTab === 'unprofile_tutors'
                     ? 'Un-Profile Updated Tutors (Registered Tutors Pending Profile Completion)'
-                    : activeTab === 'tutors_directory' || activeTab === 'complete_tutors' || activeTab === 'assigned_tutors'
-                    ? '4. Tutors Directory (Approved Tutors & Assigned Parents)'
+                    : activeTab === 'confirm_tutors_details' || activeTab === 'tutors_directory' || activeTab === 'complete_tutors' || activeTab === 'assigned_tutors'
+                    ? '4. Confirm Tutors Details (confirm_tutors_details / complete_tutors)'
                     : activeTab === 'received_fees'
                     ? 'Received Fee • Paid Parents & Student Details'
                     : activeTab === 'withdrawal_notices'
@@ -2445,13 +2506,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 {activeTab === 'incoming_bookings' || activeTab === 'bookings'
                   ? 'Review real-time parent requests and allocate verified home educators; bookings are automatically deleted upon acceptance'
                   : activeTab === 'parents' || activeTab === 'registered_directory'
-                  ? 'Overview of all genuine registered parents, student learning requirements, and home tutor allocations'
+                  ? 'Overview of all genuine registered parents retrieved from Firestore collection parents and local cache'
                   : activeTab === 'tutors_requests' || activeTab === 'tutors'
-                  ? 'Registered tutors undergoing profile and certificate verification; approve genuine teachers to add to Tutors Directory'
+                  ? 'Registered tutors undergoing profile and certificate verification from collection tutors_requests / tutor_requests'
                   : activeTab === 'unprofile_tutors'
                   ? 'Registered tutors who have not yet submitted their full profile and certificates. Once they update their profile, they will automatically move to Tutors Verification.'
-                  : activeTab === 'tutors_directory' || activeTab === 'complete_tutors' || activeTab === 'assigned_tutors'
-                  ? 'Approved home tutors directory with complete credentials, subjects handled, and connected parent families'
+                  : activeTab === 'confirm_tutors_details' || activeTab === 'tutors_directory' || activeTab === 'complete_tutors' || activeTab === 'assigned_tutors'
+                  ? 'Confirmed & approved home educators from collection confirm_tutors_details / complete_tutors with connected parent families'
                   : activeTab === 'received_fees'
                   ? 'Real-time record of tuition fees received from parents with student name, date/time, educator, and 28-day billing cycle'
                   : activeTab === 'withdrawal_notices'
@@ -2620,6 +2681,172 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
 
         {/* =========================================================================
+            CLOUD FIRESTORE STATUS & DIAGNOSTICS BANNER
+           ========================================================================= */}
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/40 text-amber-300 flex items-center justify-center font-black text-sm">
+                FS
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-sm font-bold text-white">
+                    Cloud Firestore: <span className="font-mono text-amber-400">kumari-db</span>
+                  </h3>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                    Project: kumari-institute-2a4ae
+                  </span>
+                  {firestoreNotice?.code === 'permission-denied' ? (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" />
+                      <span>Console Rules Lock (Fallback Active)</span>
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" />
+                      <span>Online &amp; Connected</span>
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Multi-collection listening across <code className="text-amber-300">parents</code>, <code className="text-amber-300">tutors_requests</code>, <code className="text-amber-300">confirm_tutors_details</code>, and <code className="text-amber-300">complete_tutors</code>.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleTestDirectCloudFetch}
+                disabled={isTestingCloud}
+                className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Directly test reading all Firestore collections from cloud"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isTestingCloud ? 'animate-spin' : ''}`} />
+                <span>{isTestingCloud ? 'Testing Cloud...' : 'Test Cloud Sync'}</span>
+              </button>
+
+              <a
+                href="https://console.firebase.google.com/project/kumari-institute-2a4ae/firestore/databases/kumari-db/rules"
+                target="_blank"
+                rel="noreferrer"
+                className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                title="Open Firebase Console Security Rules for kumari-db"
+              >
+                <span>Console Rules</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          </div>
+
+          {/* Cloud Test Results breakdown if available */}
+          {cloudTestResult && (
+            <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 text-xs space-y-2">
+              <div className="flex items-center justify-between text-slate-300 font-bold text-[11px]">
+                <span>Cloud Collections Test Result:</span>
+                <button
+                  type="button"
+                  onClick={() => setCloudTestResult(null)}
+                  className="text-slate-500 hover:text-white"
+                >
+                  ✕ Close
+                </button>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {Object.entries(cloudTestResult).map(([col, rawRes]) => {
+                  const res = rawRes as { ok: boolean; count?: number; error?: string };
+                  return (
+                    <div
+                      key={col}
+                      className={`p-2 rounded-xl border flex items-center justify-between text-[11px] ${
+                        res.ok
+                          ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300'
+                          : 'bg-rose-950/30 border-rose-500/40 text-rose-300'
+                      }`}
+                    >
+                      <span className="font-mono truncate">{col}:</span>
+                      <span className="font-bold ml-1">
+                        {res.ok ? `${res.count} docs` : res.error}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Permission-Denied Guide Banner */}
+          {firestoreNotice?.code === 'permission-denied' && !isCloudBannerDismissed && (
+            <div className="p-4 rounded-2xl bg-amber-950/30 border border-amber-500/40 text-xs space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+                  <div>
+                    <h4 className="font-bold text-amber-300 text-sm">
+                      Firebase Console Rules Lock Detected (<code className="text-rose-300">permission-denied</code>)
+                    </h4>
+                    <p className="text-slate-300 mt-1 leading-relaxed">
+                      Your website is connected to <strong className="text-white">kumari-db</strong>, but Firestore Security Rules on your Firebase Console currently block public read/write requests. Local server storage is actively serving all records so no data is lost. To enable immediate live cloud sync directly from Firebase, copy and publish these open rules in the Firebase Console:
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsCloudBannerDismissed(true)}
+                  className="text-slate-500 hover:text-slate-300 text-xs shrink-0"
+                  title="Dismiss notice for this session"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Rules Snippet */}
+              <div className="relative bg-slate-950 p-3 rounded-xl border border-slate-800 font-mono text-[11px] text-amber-200">
+                <pre className="overflow-x-auto">
+{`rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}`}
+                </pre>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const snippet = `rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /{document=**} {\n      allow read, write: if true;\n    }\n  }\n}`;
+                    navigator.clipboard.writeText(snippet);
+                    setIsRulesCopied(true);
+                    showToast('success', '✓ Firestore open rules copied to clipboard!');
+                    setTimeout(() => setIsRulesCopied(false), 3000);
+                  }}
+                  className="absolute top-2.5 right-2.5 px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[10px] flex items-center gap-1 cursor-pointer transition-colors shadow-sm"
+                >
+                  <Copy className="w-3 h-3" />
+                  <span>{isRulesCopied ? 'Copied!' : 'Copy Rules'}</span>
+                </button>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] text-slate-400">
+                <span>
+                  Paste into: <strong>Firebase Console → Build → Firestore Database → kumari-db → Rules</strong> tab → click <strong>Publish</strong>.
+                </span>
+                <a
+                  href="https://console.firebase.google.com/project/kumari-institute-2a4ae/firestore/databases/kumari-db/rules"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-amber-400 hover:underline flex items-center gap-1 font-bold"
+                >
+                  <span>Open kumari-db Rules Tab →</span>
+                </a>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* =========================================================================
             TAB: RECEIVED FEE (Collection: received_fees)
            ========================================================================= */}
         {activeTab === 'received_fees' && (
@@ -2646,13 +2873,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <div className="bg-slate-800/80 rounded-3xl p-6 border border-slate-700/80 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-xl font-bold text-white">Tutor Registrations &amp; Certificate Previews</h2>
+                  <h2 className="text-xl font-bold text-white">Tutors Requests &amp; Certificate Previews (tutors_requests)</h2>
                   <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
                     Admin Approval Required
                   </span>
                 </div>
                 <p className="text-xs sm:text-sm text-slate-400 max-w-2xl">
-                  All newly registered tutors arrive here first. Inspect their uploaded 10th, 12th, and Degree marksheets alongside their Government ID proof. Once you accept a tutor as genuine, they will immediately appear on the Find Home Tutor search page.
+                  All newly registered tutor requests from Firestore collections <code className="text-amber-300">tutors_requests</code> and <code className="text-amber-300">tutor_requests</code> arrive here first. Inspect their uploaded 10th, 12th, and Degree marksheets alongside their Government ID proof. Once you accept a tutor as genuine, they will immediately appear on the Find Home Tutor search page and in Confirm Tutors Details.
                 </p>
               </div>
 
@@ -3400,22 +3627,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         )}
 
         {/* =========================================================================
-            TAB 4: TUTORS DIRECTORY (Approved Tutors & Connected Assigned Parents)
+            TAB 4: CONFIRM TUTORS DETAILS (Collections: confirm_tutors_details & complete_tutors)
            ========================================================================= */}
-        {(activeTab === 'tutors_directory' || activeTab === 'complete_tutors' || activeTab === 'assigned_tutors') && (
+        {(activeTab === 'confirm_tutors_details' || activeTab === 'tutors_directory' || activeTab === 'complete_tutors' || activeTab === 'assigned_tutors') && (
           <div className="space-y-6">
             {/* Header Description & Metrics */}
             <div className="bg-slate-800/80 rounded-3xl p-6 border border-slate-700/80 space-y-4">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <h2 className="text-xl font-bold text-white">Approved Tutors Directory</h2>
+                    <h2 className="text-xl font-bold text-white">Confirm Tutors Details (confirm_tutors_details)</h2>
                     <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
                       {approvedTutors.length} Verified Home Tutors
                     </span>
                   </div>
                   <p className="text-xs sm:text-sm text-slate-400 max-w-2xl">
-                    Comprehensive directory of all approved home educators in Rayagada. Review teacher credentials, toggle public visibility, and manage direct connections with assigned parent families and students.
+                    Comprehensive directory of all approved &amp; confirmed home educators retrieved from Firestore collections <code className="text-amber-300">confirm_tutors_details</code> and <code className="text-amber-300">complete_tutors</code> in Rayagada. Review teacher credentials, toggle public visibility, and manage direct connections with assigned parent families and students.
                   </p>
                 </div>
 
@@ -5512,14 +5739,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <div>
                       <div className="flex items-center gap-2">
                         <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-                          Registered Directory
+                          Parents Directory (parents)
                         </h2>
                         <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                          Parents &amp; Tutors
+                          Firestore: parents
                         </span>
                       </div>
                       <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl leading-relaxed">
-                        Comprehensive registry of all registered families and home educators in Rayagada. Use filters to identify unassigned parents who registered but have not booked any tutors yet, and allocate verified home teachers.
+                        Comprehensive registry of all registered families retrieved from Cloud Firestore collection <code className="text-amber-300">parents</code> (and persistent local cache) in Rayagada. Use filters to identify unassigned parents who registered but have not booked any tutors yet, and allocate verified home teachers.
                       </p>
                     </div>
                   </div>

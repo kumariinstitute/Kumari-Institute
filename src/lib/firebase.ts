@@ -64,10 +64,8 @@ export interface FirestoreConnectionState {
  */
 export async function verifyFirestoreConnection(): Promise<FirestoreConnectionState> {
   try {
-    const probeRef = doc(db, "_probe", "health");
-    const probePromise = getDoc(probeRef).catch(() => null);
-    const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 3000));
-    await Promise.race([probePromise, timeoutPromise]);
+    const probeRef = doc(db, "parents", "_probe_health");
+    await getDoc(probeRef);
 
     return {
       connected: true,
@@ -76,12 +74,15 @@ export async function verifyFirestoreConnection(): Promise<FirestoreConnectionSt
       lastChecked: new Date().toISOString()
     };
   } catch (err: any) {
+    const errCode = err?.code || '';
     const errMsg = err?.message || '';
-    let friendlyError = 'Connecting to Cloud Firestore...';
-    if (errMsg.includes('Native mode API is disabled') || errMsg.includes('FAILED_PRECONDITION')) {
-      friendlyError = 'Database mode notice: Database requires Firestore in Native mode.';
+    let friendlyError = '';
+    if (errCode === 'permission-denied' || errMsg.includes('insufficient permissions')) {
+      friendlyError = 'Firebase Rules Blocking Read Access: Database rules in Firebase Console are rejecting client reads (permission-denied).';
     } else if (errMsg.includes('NOT_FOUND') || errMsg.includes('does not exist')) {
-      friendlyError = `Database '${FIRESTORE_DATABASE_ID}' not found in project.`;
+      friendlyError = `Database '${FIRESTORE_DATABASE_ID}' not found in project ${firebaseConfig.projectId}.`;
+    } else {
+      friendlyError = errMsg || 'Unable to connect to Cloud Firestore.';
     }
     return {
       connected: false,

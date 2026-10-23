@@ -73,39 +73,31 @@ function saveHeroBanners(banners: ServerHeroBanner[]) {
 
 let heroBannersDatabase: ServerHeroBanner[] = loadSavedHeroBanners();
 
-// Helper to exclude fake/sample parents
+// Helper to exclude only true dummy placeholders (preserving all real parents)
 function isFakeParentRecord(u: any): boolean {
   if (!u) return true;
-  const uid = String(u.uid || u.id || '').toLowerCase();
+  // If not a parent record, return false so usersDatabase never drops teachers or admins
+  if (u.role && u.role !== 'parent') return false;
+
   const name = String(u.fullName || u.name || '').toLowerCase().trim();
-  const child = String(u.childName || '').toLowerCase().trim();
   const email = String(u.email || '').toLowerCase().trim();
+  const phone = String(u.phone || u.mobile || '').trim();
 
-  // Must have a real name
-  if (!name || name === 'parent' || name === 'test' || name === 'test parent' || name.includes('demo') || name.includes('sample')) {
-    return true;
-  }
-  // Exclude incomplete registration (must have student details or completed profile)
-  const hasCompletedRegistration = u.profileCompleted === true || child.length > 0;
-  if (!hasCompletedRegistration) {
+  // Keep any user that has a name, email, or phone
+  if (!name && !email && !phone) {
     return true;
   }
 
-  return (
-    uid.includes('parent-ramesh-patnaik') ||
-    uid.includes('parent-sasmita-sahu') ||
-    uid.includes('parent-deepak-mohanty') ||
-    uid.includes('aa3qpbnfr4eimeftvmrj0vatvdq2') ||
-    uid.includes('kqc3hy8leicwk9blsnek3t8mxdx2') ||
-    name.includes('ramesh patnaik') ||
-    name.includes('sasmita sahu') ||
-    name.includes('deepak mohanty') ||
-    name.includes('anjan naik') ||
-    child.includes('ananya patnaik') ||
-    child.includes('aryan sahu') ||
-    child.includes('subhashree mohanty') ||
-    (u.role === 'parent' && (name.includes('sunil kumar') || child.includes('rohan kumar')))
-  );
+  // Only exclude obvious dummy test placeholders
+  if (name === 'sample parent' || name === 'dummy parent' || name === 'test parent dummy') {
+    return true;
+  }
+  const uid = String(u.uid || u.id || '').toLowerCase();
+  if (uid.includes('dummy_parent') || uid.includes('sample_mock') || uid.includes('demo_sample_dummy')) {
+    return true;
+  }
+
+  return false;
 }
 
 // 1. Users Store
@@ -1956,6 +1948,18 @@ app.post("/api/users", (req, res) => {
       teachersDatabase.unshift(teacherObj);
     }
     saveTeachersToFile(teachersDatabase);
+  }
+
+  // If this user is a parent, also sync to parentsDatabase
+  if (updatedUser.role === 'parent') {
+    const parentKey = updatedUser.uid || userKey;
+    parentsDatabase[parentKey] = {
+      ...(parentsDatabase[parentKey] || {}),
+      ...updatedUser,
+      role: 'parent',
+      updatedAt: new Date().toISOString()
+    };
+    persistParents(parentsDatabase);
   }
 
   console.log(`[User Store] Saved user ${user.name || userKey} (${user.email}) to persistent storage.`);
