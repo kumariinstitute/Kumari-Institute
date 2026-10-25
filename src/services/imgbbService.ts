@@ -3,7 +3,7 @@
  * Uses ImgBB API to host and persist teacher profile images, certificates, and marksheets.
  */
 
-export const IMGBB_API_KEY = 'ae6c7aa5fc50f949d8947f0a375bb74e';
+export const IMGBB_API_KEY = 'd4024707630f570bdbc685d55813ecd8';
 
 export interface ImgBBUploadResult {
   success: boolean;

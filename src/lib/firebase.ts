@@ -50,6 +50,16 @@ try {
 
 export const db = firestoreInstance;
 
+// Also initialize default database instance '(default)' for dual-database resilience
+let defaultFirestoreInstance: Firestore;
+try {
+  defaultFirestoreInstance = getFirestore(app);
+} catch {
+  defaultFirestoreInstance = firestoreInstance;
+}
+export const defaultDb = defaultFirestoreInstance;
+export const allDbInstances = [db, defaultDb];
+
 // Real-time connection status state for UI feedback
 export interface FirestoreConnectionState {
   connected: boolean;

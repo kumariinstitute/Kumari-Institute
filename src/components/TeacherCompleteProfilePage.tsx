@@ -80,6 +80,23 @@ export const AVAILABLE_1HR_SLOTS: string[] = [
   '08:00 PM - 09:00 PM'
 ];
 
+export const ALL_INDIVIDUAL_CLASSES = [
+  '1st',
+  '2nd',
+  '3rd',
+  '4th',
+  '5th',
+  '6th',
+  '7th',
+  '8th',
+  '9th',
+  '10th',
+  '11th',
+  '12th'
+] as const;
+
+export const ALL_SUPPORTED_BOARDS = ['CBSE', 'ICSE', 'State Board'] as const;
+
 export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProps> = ({
   currentUser,
   onBackToDashboard,
@@ -88,9 +105,12 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
   const draftKey = `teacher_profile_draft_${currentUser?.uid || 'guest'}`;
 
   const isAlreadyCompleted = Boolean(
-    currentUser?.profileCompleted ||
+    currentUser?.profileCompleted === true ||
     (currentUser as any)?.kycStatus === 'approved' ||
-    (currentUser as any)?.kycStatus === 'submitted'
+    (currentUser as any)?.kycStatus === 'submitted' ||
+    (currentUser as any)?.isApproved === true ||
+    (currentUser as any)?.status === 'approved' ||
+    (currentUser as any)?.verified === true
   );
 
   // 1. Personal Information State
@@ -210,57 +230,93 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
     (currentUser as any)?.classesHandled || []
   );
 
-  // 5b. Educational Board Selection (CBSE & ICSE) & Class-Wise Monthly Tuition Fees
+  // 5b. Educational Board Selection & Class-Wise Monthly Tuition Fees (1st to 12th)
   const [selectedBoards, setSelectedBoards] = useState<string[]>(() => {
     const raw = (currentUser as any)?.boards || (currentUser as any)?.boardsSupported || (currentUser as any)?.customFeeSchedule?.boards;
     if (Array.isArray(raw) && raw.length > 0) return raw;
-    return ['CBSE', 'ICSE'];
+    return ['CBSE', 'ICSE', 'State Board'];
   });
-  const [activeBoardTab, setActiveBoardTab] = useState<'CBSE' | 'ICSE'>('CBSE');
+  const [activeBoardTab, setActiveBoardTab] = useState<string>('CBSE');
 
-  // CBSE Fee: 1st to 7th (all subjects), 8th to 10th (per subject), 11th & 12th (per subject)
-  const [feeCbse1to7, setFeeCbse1to7] = useState<string>(
-    (currentUser as any)?.customFeeSchedule?.cbse?.class1to7?.toString() ||
-    (currentUser as any)?.feeClass1to7?.toString() ||
-    (currentUser as any)?.customFeeSchedule?.primary1to7?.toString() ||
-    (currentUser as any)?.customFeeSchedule?.primary1to5?.toString() ||
-    (currentUser as any)?.feePrimary1to5?.toString() ||
-    '1500'
-  );
-  const [feeCbse8to10, setFeeCbse8to10] = useState<string>(
-    (currentUser as any)?.customFeeSchedule?.cbse?.class8to10?.toString() ||
-    (currentUser as any)?.feeClass8to10?.toString() ||
-    (currentUser as any)?.customFeeSchedule?.middle8to10?.toString() ||
-    (currentUser as any)?.customFeeSchedule?.secondary9to10?.toString() ||
-    (currentUser as any)?.feeSecondary9to10?.toString() ||
-    '2000'
-  );
-  const [feeCbse11to12, setFeeCbse11to12] = useState<string>(
-    (currentUser as any)?.customFeeSchedule?.cbse?.class11to12?.toString() ||
-    (currentUser as any)?.feeClass11to12?.toString() ||
-    (currentUser as any)?.customFeeSchedule?.senior11to12?.toString() ||
-    (currentUser as any)?.feeSenior11to12?.toString() ||
-    '3000'
-  );
+  const [classFees, setClassFees] = useState<Record<string, Record<string, string>>>(() => {
+    const rawSchedule = (currentUser as any)?.customFeeSchedule || {};
+    const classWise = rawSchedule.classWise || {};
+    const res: Record<string, Record<string, string>> = {
+      CBSE: {},
+      ICSE: {},
+      'State Board': {}
+    };
 
-  // ICSE Fee: 1st to 7th (all subjects), 8th to 10th (per subject), 11th & 12th (per subject)
-  const [feeIcse1to7, setFeeIcse1to7] = useState<string>(
-    (currentUser as any)?.customFeeSchedule?.icse?.class1to7?.toString() ||
-    (currentUser as any)?.customFeeSchedule?.primary1to7?.toString() ||
-    '1800'
-  );
-  const [feeIcse8to10, setFeeIcse8to10] = useState<string>(
-    (currentUser as any)?.customFeeSchedule?.icse?.class8to10?.toString() ||
-    (currentUser as any)?.customFeeSchedule?.middle8to10?.toString() ||
-    '2200'
-  );
-  const [feeIcse11to12, setFeeIcse11to12] = useState<string>(
-    (currentUser as any)?.customFeeSchedule?.icse?.class11to12?.toString() ||
-    (currentUser as any)?.customFeeSchedule?.senior11to12?.toString() ||
-    '3200'
-  );
+    ALL_SUPPORTED_BOARDS.forEach((board) => {
+      const bKey = board === 'State Board' ? 'stateBoard' : board.toLowerCase();
+      const existing = classWise[board] || rawSchedule[bKey] || rawSchedule[board] || {};
+
+      ALL_INDIVIDUAL_CLASSES.forEach((cls) => {
+        if (existing[cls] !== undefined && existing[cls] !== null && String(existing[cls]).trim() !== '') {
+          res[board][cls] = String(existing[cls]);
+        } else {
+          const num = parseInt(cls);
+          if (board === 'CBSE') {
+            if (num <= 5) res[board][cls] = String((currentUser as any)?.feeClass1to7 || rawSchedule?.cbse?.class1to7 || '1500');
+            else if (num <= 7) res[board][cls] = String((currentUser as any)?.feeClass1to7 || rawSchedule?.cbse?.class1to7 || '1700');
+            else if (num <= 10) res[board][cls] = String((currentUser as any)?.feeClass8to10 || rawSchedule?.cbse?.class8to10 || '2000');
+            else res[board][cls] = String((currentUser as any)?.feeClass11to12 || rawSchedule?.cbse?.class11to12 || '3000');
+          } else if (board === 'ICSE') {
+            if (num <= 5) res[board][cls] = String(rawSchedule?.icse?.class1to7 || '1800');
+            else if (num <= 7) res[board][cls] = String(rawSchedule?.icse?.class1to7 || '2000');
+            else if (num <= 10) res[board][cls] = String(rawSchedule?.icse?.class8to10 || '2200');
+            else res[board][cls] = String(rawSchedule?.icse?.class11to12 || '3200');
+          } else {
+            // State Board
+            if (num <= 5) res[board][cls] = String(rawSchedule?.stateBoard?.class1to7 || '1200');
+            else if (num <= 7) res[board][cls] = String(rawSchedule?.stateBoard?.class1to7 || '1400');
+            else if (num <= 10) res[board][cls] = String(rawSchedule?.stateBoard?.class8to10 || '1800');
+            else res[board][cls] = String(rawSchedule?.stateBoard?.class11to12 || '2500');
+          }
+        }
+      });
+    });
+
+    return res;
+  });
+
+  const handleClassFeeChange = (board: string, cls: string, val: string) => {
+    setClassFees((prev) => ({
+      ...prev,
+      [board]: {
+        ...(prev[board] || {}),
+        [cls]: val
+      }
+    }));
+  };
+
+  const handleApplyFeeToAllClasses = (board: string, val: string) => {
+    if (!val) return;
+    setClassFees((prev) => {
+      const updated = { ...(prev[board] || {}) };
+      ALL_INDIVIDUAL_CLASSES.forEach((cls) => {
+        updated[cls] = val;
+      });
+      return {
+        ...prev,
+        [board]: updated
+      };
+    });
+  };
 
   // Backward-compatibility aliases
+  const feeCbse1to7 = classFees['CBSE']?.['1st'] || '1500';
+  const setFeeCbse1to7 = (v: string) => handleClassFeeChange('CBSE', '1st', v);
+  const feeCbse8to10 = classFees['CBSE']?.['8th'] || '2000';
+  const setFeeCbse8to10 = (v: string) => handleClassFeeChange('CBSE', '8th', v);
+  const feeCbse11to12 = classFees['CBSE']?.['11th'] || '3000';
+  const setFeeCbse11to12 = (v: string) => handleClassFeeChange('CBSE', '11th', v);
+  const feeIcse1to7 = classFees['ICSE']?.['1st'] || '1800';
+  const setFeeIcse1to7 = (v: string) => handleClassFeeChange('ICSE', '1st', v);
+  const feeIcse8to10 = classFees['ICSE']?.['8th'] || '2200';
+  const setFeeIcse8to10 = (v: string) => handleClassFeeChange('ICSE', '8th', v);
+  const feeIcse11to12 = classFees['ICSE']?.['11th'] || '3200';
+  const setFeeIcse11to12 = (v: string) => handleClassFeeChange('ICSE', '11th', v);
   const feePrimary1to5 = feeCbse1to7;
   const setFeePrimary1to5 = setFeeCbse1to7;
   const feeMiddle6to8 = feeCbse8to10;
@@ -839,33 +895,42 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
         experience: experienceYears,
         boardsSupported: selectedBoards,
         boards: selectedBoards,
-        feeClass1to7: Number(feeCbse1to7) || 1500,
-        feeClass8to10: Number(feeCbse8to10) || 2000,
-        feeClass11to12: Number(feeCbse11to12) || 3000,
+        feeClass1to7: Number(classFees['CBSE']?.['1st']) || Number(feeCbse1to7) || 1500,
+        feeClass8to10: Number(classFees['CBSE']?.['8th']) || Number(feeCbse8to10) || 2000,
+        feeClass11to12: Number(classFees['CBSE']?.['11th']) || Number(feeCbse11to12) || 3000,
         customFeeSchedule: {
           boards: selectedBoards,
+          classWise: classFees,
           cbse: {
-            class1to7: Number(feeCbse1to7) || 1500,
-            class8to10: Number(feeCbse8to10) || 2000,
-            class11to12: Number(feeCbse11to12) || 3000
+            class1to7: Number(classFees['CBSE']?.['1st']) || 1500,
+            class8to10: Number(classFees['CBSE']?.['8th']) || 2000,
+            class11to12: Number(classFees['CBSE']?.['11th']) || 3000,
+            ...(classFees['CBSE'] || {})
           },
           icse: {
-            class1to7: Number(feeIcse1to7) || 1800,
-            class8to10: Number(feeIcse8to10) || 2200,
-            class11to12: Number(feeIcse11to12) || 3200
+            class1to7: Number(classFees['ICSE']?.['1st']) || 1800,
+            class8to10: Number(classFees['ICSE']?.['8th']) || 2200,
+            class11to12: Number(classFees['ICSE']?.['11th']) || 3200,
+            ...(classFees['ICSE'] || {})
           },
-          primary1to7: Number(feeCbse1to7) || 1500,
-          middle8to10: Number(feeCbse8to10) || 2000,
-          senior11to12: Number(feeCbse11to12) || 3000,
-          primary1to5: Number(feeCbse1to7) || 1500,
-          middle6to8: Number(feeCbse8to10) || 2000,
-          secondary9to10: Number(feeCbse8to10) || 2000
+          stateBoard: {
+            class1to7: Number(classFees['State Board']?.['1st']) || 1200,
+            class8to10: Number(classFees['State Board']?.['8th']) || 1800,
+            class11to12: Number(classFees['State Board']?.['11th']) || 2500,
+            ...(classFees['State Board'] || {})
+          },
+          primary1to7: Number(classFees['CBSE']?.['1st']) || 1500,
+          middle8to10: Number(classFees['CBSE']?.['8th']) || 2000,
+          senior11to12: Number(classFees['CBSE']?.['11th']) || 3000,
+          primary1to5: Number(classFees['CBSE']?.['1st']) || 1500,
+          middle6to8: Number(classFees['CBSE']?.['8th']) || 2000,
+          secondary9to10: Number(classFees['CBSE']?.['8th']) || 2000
         },
-        feePrimary1to5: Number(feeCbse1to7) || 1500,
-        feeMiddle6to8: Number(feeCbse8to10) || 2000,
-        feeSecondary9to10: Number(feeCbse8to10) || 2000,
-        feeSenior11to12: Number(feeCbse11to12) || 3000,
-        monthlyFee: Number(feeCbse1to7) || 1500,
+        feePrimary1to5: Number(classFees['CBSE']?.['1st']) || 1500,
+        feeMiddle6to8: Number(classFees['CBSE']?.['8th']) || 2000,
+        feeSecondary9to10: Number(classFees['CBSE']?.['8th']) || 2000,
+        feeSenior11to12: Number(classFees['CBSE']?.['11th']) || 3000,
+        monthlyFee: Number(classFees['CBSE']?.['1st']) || Number(feeCbse1to7) || 1500,
         hourlyCharges: Number(hourlyCharges) || 100,
         hourlyRate: Number(hourlyCharges) || 100,
         hourlyFee: Number(hourlyCharges) || 100,
@@ -886,13 +951,14 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
         aadhaarNumber: aadhaarNumber.trim(),
         aadhaarDocUrl: aadhaarImage?.imgbbUrl || aadhaarImage?.dataUrl || '',
         profileCompleted: true,
-        kycStatus: isTeacherApproved ? ('approved' as const) : ('submitted' as const),
-        verified: isTeacherApproved,
-        status: isTeacherApproved ? 'approved' : 'pending',
-        isApproved: isTeacherApproved,
+        // Second-time upload direct update: no re-verification needed!
+        kycStatus: isAlreadyCompleted || isTeacherApproved ? ('approved' as const) : ('submitted' as const),
+        verified: isAlreadyCompleted || isTeacherApproved,
+        status: isAlreadyCompleted || isTeacherApproved ? 'approved' : 'pending',
+        isApproved: isAlreadyCompleted || isTeacherApproved,
         isBooked: Boolean((currentUser as any)?.isBooked),
         bookingStatus: (currentUser as any)?.bookingStatus || 'available',
-        verificationStatus: isTeacherApproved ? 'Verified Genuine Tutor' : 'Pending Verification',
+        verificationStatus: isAlreadyCompleted || isTeacherApproved ? 'Verified Genuine Tutor' : 'Pending Verification',
         updatedAt: new Date().toISOString()
       };
 
@@ -940,11 +1006,11 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
         phone: mobileNumber.trim(),
         gender: gender as 'male' | 'female' | 'other',
         profileCompleted: true,
-        kycStatus: isTeacherApproved ? ('approved' as const) : ('submitted' as const),
-        verified: isTeacherApproved,
-        isApproved: isTeacherApproved,
-        status: isTeacherApproved ? 'approved' : 'pending',
-        verificationStatus: isTeacherApproved ? 'Verified Genuine Tutor' : 'Pending Verification',
+        kycStatus: isAlreadyCompleted || isTeacherApproved ? ('approved' as const) : ('submitted' as const),
+        verified: isAlreadyCompleted || isTeacherApproved,
+        isApproved: isAlreadyCompleted || isTeacherApproved,
+        status: isAlreadyCompleted || isTeacherApproved ? 'approved' : 'pending',
+        verificationStatus: isAlreadyCompleted || isTeacherApproved ? 'Verified Genuine Tutor' : 'Pending Verification',
         locality: compiledAddress,
         qualification: effectiveDegreeCourse || 'B.Sc',
         university: effectiveDegreeCollege,
@@ -952,15 +1018,15 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
         experienceYears: experienceYears.toLowerCase().includes('fresher') ? 0 : (parseInt(experienceYears) || 0),
         boardsSupported: selectedBoards,
         boards: selectedBoards,
-        feeClass1to7: Number(feeCbse1to7) || 1500,
-        feeClass8to10: Number(feeCbse8to10) || 2000,
-        feeClass11to12: Number(feeCbse11to12) || 3000,
+        feeClass1to7: Number(classFees['CBSE']?.['1st']) || 1500,
+        feeClass8to10: Number(classFees['CBSE']?.['8th']) || 2000,
+        feeClass11to12: Number(classFees['CBSE']?.['11th']) || 3000,
         customFeeSchedule: teacherPayload.customFeeSchedule,
-        feePrimary1to5: Number(feeCbse1to7) || 1500,
-        feeMiddle6to8: Number(feeCbse8to10) || 2000,
-        feeSecondary9to10: Number(feeCbse8to10) || 2000,
-        feeSenior11to12: Number(feeCbse11to12) || 3000,
-        monthlyFee: Number(feeCbse1to7) || 1500,
+        feePrimary1to5: Number(classFees['CBSE']?.['1st']) || 1500,
+        feeMiddle6to8: Number(classFees['CBSE']?.['8th']) || 2000,
+        feeSecondary9to10: Number(classFees['CBSE']?.['8th']) || 2000,
+        feeSenior11to12: Number(classFees['CBSE']?.['11th']) || 3000,
+        monthlyFee: Number(classFees['CBSE']?.['1st']) || 1500,
         hourlyCharges: Number(hourlyCharges) || 100,
         hourlyFee: Number(hourlyCharges) || 100,
         availableTimeSlots: effectiveSlots,
@@ -976,7 +1042,7 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
         aadhaarDocUrl: aadhaarImage?.imgbbUrl || aadhaarImage?.dataUrl || ''
       };
 
-      if (isTeacherApproved) {
+      if (isAlreadyCompleted || isTeacherApproved) {
         markTeacherApprovedInRegistry(uid);
         if (currentUser?.email) markTeacherApprovedInRegistry(currentUser.email);
       }
@@ -986,7 +1052,12 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
 
       // 4. Clear draft
       localStorage.removeItem(draftKey);
-      showToast('success', 'Teacher profile details saved to Firestore & submitted for verification!');
+      showToast(
+        'success',
+        isAlreadyCompleted
+          ? 'Teacher profile updated directly! Changes are live across Kumari Institute.'
+          : 'Teacher profile details saved to Firestore & submitted for verification!'
+      );
 
       setTimeout(() => {
         if (onProfileSaved) {
@@ -1002,6 +1073,525 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
       setIsSubmitting(false);
     }
   };
+
+  // 1. Render Subjects & Teaching Availability Section
+  const renderSubjectsAndAvailabilitySection = () => (
+    <div className="bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-6 shadow-xs space-y-5">
+      <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
+        <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+          <Briefcase className="w-4 h-4" />
+        </div>
+        <div>
+          <h2 className="text-base font-bold text-slate-900">Subjects &amp; Teaching Availability</h2>
+          <p className="text-xs text-slate-500">
+            Select your subjects, classes handled, and teaching experience
+          </p>
+        </div>
+      </div>
+
+      {/* Subjects You Teach */}
+      <div>
+        <label className="block text-xs font-semibold text-slate-700 mb-2">
+          Subjects You Teach <span className="text-red-500">*</span>
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {[
+            'Mathematics',
+            'Science',
+            'English',
+            'Social Studies',
+            'Odia',
+            'Hindi',
+            'Physics',
+            'Chemistry',
+            'Biology',
+            'Computer Science',
+            'EVS',
+            'Commerce',
+            'Economics'
+          ].map((subject) => {
+            const isChecked = selectedSubjects.includes(subject);
+            return (
+              <button
+                type="button"
+                key={subject}
+                onClick={() => {
+                  setSelectedSubjects((prev) =>
+                    prev.includes(subject)
+                      ? prev.filter((s) => s !== subject)
+                      : [...prev, subject]
+                  );
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                  isChecked
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                {isChecked ? '✓ ' : '+ '}
+                {subject}
+              </button>
+            );
+          })}
+        </div>
+        {selectedSubjects.length === 0 && (
+          <p className="text-[11px] text-red-500 mt-1">Please select at least one subject</p>
+        )}
+      </div>
+
+      {/* Classes Handled */}
+      <div className="pt-2 border-t border-slate-100">
+        <label className="block text-xs font-semibold text-slate-700 mb-2">
+          Classes Handled <span className="text-red-500">*</span>
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {[
+            '1st Class',
+            '2nd Class',
+            '3rd Class',
+            '4th Class',
+            '5th Class',
+            '6th Class',
+            '7th Class',
+            '8th Class',
+            '9th Class',
+            '10th Class',
+            '11th Class',
+            '12th Class',
+            '1st - 6th Class',
+            'All Classes'
+          ].map((cls) => {
+            const isChecked = selectedClasses.includes(cls);
+            return (
+              <button
+                type="button"
+                key={cls}
+                onClick={() => {
+                  setSelectedClasses((prev) =>
+                    prev.includes(cls)
+                      ? prev.filter((c) => c !== cls)
+                      : [...prev, cls]
+                  );
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                  isChecked
+                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                {isChecked ? '✓ ' : '+ '}
+                {cls}
+              </button>
+            );
+          })}
+        </div>
+        {selectedClasses.length === 0 && (
+          <p className="text-[11px] text-red-500 mt-1">Please select at least one class</p>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+        {/* Teaching Experience */}
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+            Total Teaching Experience <span className="text-red-500">*</span>
+          </label>
+          <select
+            value={experienceYears}
+            onChange={(e) => setExperienceYears(e.target.value)}
+            className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all bg-white font-semibold text-slate-800"
+          >
+            <option value="Fresher">Fresher (New to Teaching)</option>
+            <option value="1-2 years">1-2 years</option>
+            <option value="3-5 years">3-5 years</option>
+            <option value="5-8 years">5-8 years</option>
+            <option value="8+ years">8+ years</option>
+          </select>
+        </div>
+
+        {/* Hourly Charges (Optional) */}
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+            Hourly Home Tuition Rate (Optional)
+          </label>
+          <div className="relative">
+            <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">₹</span>
+            <input
+              type="number"
+              value={hourlyCharges}
+              onChange={(e) => setHourlyCharges(e.target.value)}
+              placeholder="150"
+              className="w-full pl-8 pr-3 py-2 text-xs sm:text-sm rounded-xl border border-slate-200 focus:border-blue-500 outline-none transition-all"
+            />
+          </div>
+          <span className="text-[10px] text-slate-400 mt-1 block">Per hour doorstep tuition session</span>
+        </div>
+      </div>
+
+      {/* Languages Known */}
+      <div className="pt-2 border-t border-slate-100">
+        <label className="block text-xs font-semibold text-slate-700 mb-2">
+          Languages You Speak with Students
+        </label>
+        <div className="flex flex-wrap items-center gap-4 text-xs">
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={languages.english}
+              onChange={(e) =>
+                setLanguages((prev) => ({ ...prev, english: e.target.checked }))
+              }
+              className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
+            />
+            <span>English</span>
+          </label>
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={languages.hindi}
+              onChange={(e) =>
+                setLanguages((prev) => ({ ...prev, hindi: e.target.checked }))
+              }
+              className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
+            />
+            <span>Hindi</span>
+          </label>
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={languages.odia}
+              onChange={(e) =>
+                setLanguages((prev) => ({ ...prev, odia: e.target.checked }))
+              }
+              className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
+            />
+            <span>Odia</span>
+          </label>
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={languages.other}
+              onChange={(e) =>
+                setLanguages((prev) => ({ ...prev, other: e.target.checked }))
+              }
+              className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
+            />
+            <span>Other</span>
+          </label>
+          {languages.other && (
+            <input
+              type="text"
+              value={otherLanguageText}
+              onChange={(e) => setOtherLanguageText(e.target.value)}
+              placeholder="e.g. Telugu"
+              className="px-2.5 py-1 text-xs rounded-lg border border-slate-200 outline-none focus:border-blue-500 w-28"
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Teaching Bio */}
+      <div className="pt-2 border-t border-slate-100">
+        <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+          About Your Teaching Style &amp; Highlights (Bio)
+        </label>
+        <textarea
+          rows={3}
+          value={bio}
+          onChange={(e) => setBio(e.target.value)}
+          placeholder="Briefly describe your tutoring approach, strengths, and results with students in Rayagada..."
+          className="w-full p-3 text-xs sm:text-sm rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all resize-none"
+        />
+      </div>
+    </div>
+  );
+
+  // 2. Render Class-Wise Fee Section (All 12 Classes for Each Board)
+  const renderClassWiseFeeSection = () => (
+    <div className="bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-6 shadow-xs space-y-5">
+      <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
+        <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-sm">
+          ₹
+        </div>
+        <div>
+          <h2 className="text-base font-bold text-slate-900">
+            Monthly Tuition Fees Charged (Class-Wise) <span className="text-red-500">*</span>
+          </h2>
+          <p className="text-xs text-slate-500">
+            Set monthly tuition fees separately for each class (1st through 12th) across your supported boards
+          </p>
+        </div>
+      </div>
+
+      {/* Board Selector (CBSE, ICSE, State Board) */}
+      <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/90 space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <span className="text-xs font-bold text-slate-800">
+            Select Educational Boards Handled <span className="text-red-500">*</span>
+          </span>
+          <span className="text-[11px] text-slate-500 font-medium">
+            (Select all that apply)
+          </span>
+        </div>
+
+        <div className="flex flex-wrap gap-2.5">
+          {ALL_SUPPORTED_BOARDS.map((b) => {
+            const isSelected = selectedBoards.includes(b);
+            return (
+              <button
+                type="button"
+                key={b}
+                onClick={() => {
+                  setSelectedBoards((prev) => {
+                    if (prev.includes(b)) {
+                      if (prev.length === 1) return prev; // keep at least 1 board
+                      const updated = prev.filter((x) => x !== b);
+                      if (activeBoardTab === b) setActiveBoardTab(updated[0]);
+                      return updated;
+                    } else {
+                      return [...prev, b];
+                    }
+                  });
+                }}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  isSelected
+                    ? 'bg-[#1d4ed8] text-white shadow-xs'
+                    : 'bg-white text-slate-700 border border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                <span>{isSelected ? '✓' : '+'}</span>
+                <span>{b}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Board View Switcher Tabs */}
+        {selectedBoards.length > 1 && (
+          <div className="pt-2 flex items-center gap-2 border-t border-slate-200/70">
+            <span className="text-[11px] text-slate-500 font-medium">Configure fees for:</span>
+            <div className="inline-flex rounded-xl bg-white p-1 border border-slate-200">
+              {selectedBoards.map((b) => (
+                <button
+                  key={`tab_${b}`}
+                  type="button"
+                  onClick={() => setActiveBoardTab(b)}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    activeBoardTab === b
+                      ? 'bg-blue-50 text-blue-700 shadow-2xs font-extrabold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {b} Fees
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Class-wise fee inputs: 1st, 2nd, 3rd, ..., 12th */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <h4 className="text-xs font-bold text-slate-800">
+              {activeBoardTab} Class-Wise Monthly Fees (1st to 12th):
+            </h4>
+            <span className="text-[11px] text-slate-500">
+              Enter individual doorstep tuition fee charged per month for each standard
+            </span>
+          </div>
+          <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
+            {activeBoardTab} Syllabus
+          </span>
+        </div>
+
+        {/* 12-Class Responsive Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 pt-1">
+          {ALL_INDIVIDUAL_CLASSES.map((cls) => {
+            const currentVal = classFees[activeBoardTab]?.[cls] || '';
+            const numVal = Number(currentVal) || 0;
+            const netTakeHome = Math.round(numVal * 0.8);
+
+            return (
+              <div
+                key={`${activeBoardTab}_${cls}`}
+                className="p-3 rounded-xl bg-slate-50/80 border border-slate-200/90 hover:border-blue-300 transition-all space-y-1.5"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-800">
+                    Class {cls}
+                  </span>
+                  <span className="text-[10px] font-semibold text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                    {activeBoardTab}
+                  </span>
+                </div>
+
+                <div className="relative flex items-center">
+                  <span className="absolute left-2.5 text-xs font-bold text-slate-500">₹</span>
+                  <input
+                    type="number"
+                    required
+                    min="200"
+                    step="50"
+                    value={currentVal}
+                    onChange={(e) => handleClassFeeChange(activeBoardTab, cls, e.target.value)}
+                    placeholder="e.g. 1500"
+                    className="w-full pl-7 pr-2 py-1.5 text-xs font-bold text-slate-900 rounded-lg border border-slate-300 bg-white focus:border-blue-500 outline-none"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between text-[10px] text-slate-500 pt-0.5">
+                  <span>Net (80%):</span>
+                  <strong className="text-emerald-700 font-bold">
+                    ₹{netTakeHome.toLocaleString('en-IN')}/mo
+                  </strong>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Quick Batch Apply Helpers */}
+        <div className="pt-2 flex items-center justify-between flex-wrap gap-2 border-t border-slate-100">
+          <span className="text-[11px] text-slate-500 font-medium">Quick fee shortcuts for {activeBoardTab}:</span>
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                ['1st', '2nd', '3rd', '4th', '5th'].forEach((c) => handleClassFeeChange(activeBoardTab, c, '1500'));
+              }}
+              className="px-2 py-1 text-[10px] font-bold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
+            >
+              1st-5th: ₹1500
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                ['6th', '7th', '8th'].forEach((c) => handleClassFeeChange(activeBoardTab, c, '1800'));
+              }}
+              className="px-2 py-1 text-[10px] font-bold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
+            >
+              6th-8th: ₹1800
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                ['9th', '10th'].forEach((c) => handleClassFeeChange(activeBoardTab, c, '2200'));
+              }}
+              className="px-2 py-1 text-[10px] font-bold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
+            >
+              9th-10th: ₹2200
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                ['11th', '12th'].forEach((c) => handleClassFeeChange(activeBoardTab, c, '3000'));
+              }}
+              className="px-2 py-1 text-[10px] font-bold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
+            >
+              11th-12th: ₹3000
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // 3. Render Time Slots Section
+  const renderTimeSlotsSection = () => (
+    <div className="bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-6 shadow-xs space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2 pb-3 border-b border-slate-100">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+            <Clock className="w-4 h-4" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-slate-900">
+              Available Time Slots (1-Hour Intervals) <span className="text-red-500">*</span>
+            </h2>
+            <p className="text-xs text-slate-500">
+              Select the 1-hour interval slots when you are available for home tuition (6:00 AM to 9:00 PM)
+            </p>
+          </div>
+        </div>
+
+        {/* Quick select helpers */}
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => {
+              const morning = AVAILABLE_1HR_SLOTS.slice(0, 6);
+              setAvailableTimeSlots((prev) => Array.from(new Set([...prev, ...morning])));
+            }}
+            className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 cursor-pointer"
+          >
+            + All Morning
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const evening = AVAILABLE_1HR_SLOTS.slice(9);
+              setAvailableTimeSlots((prev) => Array.from(new Set([...prev, ...evening])));
+            }}
+            className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 cursor-pointer"
+          >
+            + All Evening
+          </button>
+          <button
+            type="button"
+            onClick={() => setAvailableTimeSlots([])}
+            className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 cursor-pointer"
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+
+      {/* 1-Hour Checklist Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-1">
+        {AVAILABLE_1HR_SLOTS.map((slot) => {
+          const isSelected = availableTimeSlots.includes(slot);
+          return (
+            <label
+              key={slot}
+              className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-xs cursor-pointer transition-all ${
+                isSelected
+                  ? 'border-blue-500 bg-blue-50/70 text-blue-900 font-semibold shadow-2xs'
+                  : 'border-slate-200/90 hover:border-slate-300 bg-white text-slate-700'
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={() => handleToggleSlot(slot)}
+                className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300 cursor-pointer"
+              />
+              <Clock
+                className={`w-3.5 h-3.5 shrink-0 ${
+                  isSelected ? 'text-blue-600' : 'text-slate-400'
+                }`}
+              />
+              <span className="truncate">{slot}</span>
+            </label>
+          );
+        })}
+      </div>
+
+      <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+        <span>
+          Selected:{' '}
+          <strong className="text-blue-600 font-bold">{availableTimeSlots.length}</strong> of{' '}
+          {AVAILABLE_1HR_SLOTS.length} slots
+        </span>
+        {availableTimeSlots.length === 0 && (
+          <span className="text-amber-600 font-semibold">
+            Please select at least one hour slot
+          </span>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 pb-20 antialiased selection:bg-blue-100 selection:text-blue-900">
@@ -1045,9 +1635,77 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
           </p>
         </div>
 
-        {/* Verification Status Overview: 4 Distinct Items */}
-        <div className="mb-8 grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-          {/* 1. Personal Info */}
+        {isAlreadyCompleted ? (
+          <form onSubmit={handleSubmitProfile} noValidate className="space-y-6">
+            {/* Direct Update Notice Banner */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-linear-to-r from-emerald-50 via-teal-50 to-blue-50 border border-emerald-200/90 shadow-xs">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm sm:text-base font-bold text-slate-900">
+                      Direct Profile Update Active (No Re-Verification Required)
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                      Auto-Approved
+                    </span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-slate-600 mt-1 leading-relaxed">
+                    Your personal information, qualifications, and KYC verification are locked.
+                    You only need to update your <strong>Subjects & Teaching Availability</strong>, <strong>Monthly Tuition Fees Charged (Class-Wise)</strong>, and <strong>Available Time Slots</strong>.
+                    Changes are saved directly to your live profile.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* SECTION 1: Subjects & Teaching Availability */}
+            {renderSubjectsAndAvailabilitySection()}
+
+            {/* SECTION 2: Monthly Tuition Fees Charged (Class-Wise) */}
+            {renderClassWiseFeeSection()}
+
+            {/* SECTION 3: Available Time Slots (1-Hour Intervals) */}
+            {renderTimeSlotsSection()}
+
+            {/* Bottom Action Bar */}
+            <div className="flex items-center justify-between pt-5 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={onBackToDashboard}
+                className="inline-flex items-center gap-2 px-5 sm:px-6 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-semibold text-xs sm:text-sm transition-all cursor-pointer shadow-2xs"
+              >
+                <X className="w-4 h-4 text-slate-500" />
+                <span>Cancel</span>
+              </button>
+
+              <button
+                type="submit"
+                onClick={handleSubmitProfile}
+                disabled={isSubmitting}
+                className="inline-flex items-center gap-2 px-6 sm:px-8 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm transition-all cursor-pointer shadow-md hover:shadow-lg disabled:opacity-60"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Saving Profile Updates...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Update Profile & Save Changes</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <>
+            {/* Verification Status Overview: 4 Distinct Items */}
+            <div className="mb-8 grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+              {/* 1. Personal Info */}
           <div className={`p-4 rounded-2xl border transition-all ${
             personalInfoStatus === 'completed'
               ? 'bg-emerald-50/60 border-emerald-200 text-emerald-950'
@@ -2175,524 +2833,14 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
             </div>
           </div>
 
-          {/* SECTION 5: Subjects, Pricing & Availability */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-6 shadow-xs space-y-5">
-            <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
-              <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                <Briefcase className="w-4 h-4" />
-              </div>
-              <div>
-                <h2 className="text-base font-bold text-slate-900">Subjects &amp; Teaching Availability</h2>
-                <p className="text-xs text-slate-500">
-                  Select your subjects, classes handled, and available teaching hours
-                </p>
-              </div>
-            </div>
+          {/* SECTION 3: Subjects & Teaching Availability */}
+          {renderSubjectsAndAvailabilitySection()}
 
-            {/* Subjects You Teach */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-2">
-                Subjects You Teach <span className="text-red-500">*</span>
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  'Mathematics',
-                  'Science',
-                  'English',
-                  'Social Studies',
-                  'Odia',
-                  'Hindi',
-                  'Computer Science',
-                  'EVS'
-                ].map((subject) => {
-                  const isChecked = selectedSubjects.includes(subject);
-                  return (
-                    <button
-                      type="button"
-                      key={subject}
-                      onClick={() => {
-                        setSelectedSubjects((prev) =>
-                          prev.includes(subject)
-                            ? prev.filter((s) => s !== subject)
-                            : [...prev, subject]
-                        );
-                      }}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
-                        isChecked
-                          ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300'
-                      }`}
-                    >
-                      {isChecked ? '✓ ' : '+ '}
-                      {subject}
-                    </button>
-                  );
-                })}
-              </div>
-              {selectedSubjects.length === 0 && (
-                <p className="text-[11px] text-red-500 mt-1">Please select at least one subject</p>
-              )}
-            </div>
+          {/* SECTION 4: Monthly Tuition Fees Charged (Class-Wise) */}
+          {renderClassWiseFeeSection()}
 
-            {/* Classes Handled */}
-            <div className="pt-2 border-t border-slate-100">
-              <label className="block text-xs font-semibold text-slate-700 mb-2">
-                Classes Handled <span className="text-red-500">*</span>
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  '1st Class',
-                  '2nd Class',
-                  '3rd Class',
-                  '4th Class',
-                  '5th Class',
-                  '6th Class',
-                  '7th Class',
-                  '8th Class',
-                  '9th Class',
-                  '10th Class',
-                  '11th Class',
-                  '12th Class',
-                  '1st - 6th Class'
-                ].map((cls) => {
-                  const isChecked = selectedClasses.includes(cls);
-                  return (
-                    <button
-                      type="button"
-                      key={cls}
-                      onClick={() => {
-                        setSelectedClasses((prev) =>
-                          prev.includes(cls)
-                            ? prev.filter((c) => c !== cls)
-                            : [...prev, cls]
-                        );
-                      }}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
-                        isChecked
-                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300'
-                      }`}
-                    >
-                      {isChecked ? '✓ ' : '+ '}
-                      {cls}
-                    </button>
-                  );
-                })}
-              </div>
-              {selectedClasses.length === 0 && (
-                <p className="text-[11px] text-red-500 mt-1">Please select at least one class</p>
-              )}
-            </div>
-
-            {/* Class-Wise Monthly Fee Structure with Board Selection (CBSE & ICSE) */}
-            <div className="pt-3 border-t border-slate-100 space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-900">
-                  Monthly Tuition Fees Charged (Class-Wise) <span className="text-red-500">*</span>
-                </label>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  Select educational boards (CBSE &amp; ICSE) and configure monthly tuition fees. 1st to 7th is all-subjects fee; 8th to 10th is per-subject fee; 11th &amp; 12th is per-subject fee.
-                </p>
-              </div>
-
-              {/* Board Selector (CBSE and ICSE) at top of fee fields */}
-              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/90 space-y-2.5">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <span className="text-xs font-bold text-slate-800">
-                    Select Boards Handled <span className="text-red-500">*</span>
-                  </span>
-                  <span className="text-[11px] text-slate-500 font-medium">
-                    (Select CBSE, ICSE, or Both)
-                  </span>
-                </div>
-
-                <div className="flex flex-wrap gap-2.5">
-                  {(['CBSE', 'ICSE'] as const).map((b) => {
-                    const isSelected = selectedBoards.includes(b);
-                    return (
-                      <button
-                        type="button"
-                        key={b}
-                        onClick={() => {
-                          setSelectedBoards((prev) => {
-                            if (prev.includes(b)) {
-                              if (prev.length === 1) return prev; // keep at least 1
-                              return prev.filter((x) => x !== b);
-                            } else {
-                              return [...prev, b];
-                            }
-                          });
-                        }}
-                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                          isSelected
-                            ? 'bg-[#1d4ed8] text-white shadow-xs'
-                            : 'bg-white text-slate-700 border border-slate-200 hover:border-slate-300'
-                        }`}
-                      >
-                        <span>{isSelected ? '✓' : '+'}</span>
-                        <span>{b} Board</span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Board View Switcher Tabs */}
-                {selectedBoards.length > 1 && (
-                  <div className="pt-2 flex items-center gap-2 border-t border-slate-200/70">
-                    <span className="text-[11px] text-slate-500 font-medium">Configure fees for:</span>
-                    <div className="inline-flex rounded-xl bg-white p-1 border border-slate-200">
-                      {selectedBoards.map((b) => (
-                        <button
-                          key={`tab_${b}`}
-                          type="button"
-                          onClick={() => setActiveBoardTab(b as 'CBSE' | 'ICSE')}
-                          className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                            activeBoardTab === b
-                              ? 'bg-blue-50 text-blue-700 shadow-2xs'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                        >
-                          {b} Fees
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* 20% Tutor Commission Transparency Notice (Visible to Tutors only) */}
-              <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200/80 text-amber-950 space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 rounded-md bg-amber-600 text-white flex items-center justify-center font-black text-xs shrink-0">
-                    %
-                  </div>
-                  <h4 className="text-xs font-bold text-amber-900">
-                    Kumari Institute Commission Policy (20%)
-                  </h4>
-                </div>
-                <p className="text-[11px] text-amber-900 leading-relaxed font-medium">
-                  20% of your tuition fees are payable to Kumari Institute as service commission for parent verification, student lead assignment, timetable management, and continuous academic support. <strong>You receive 80% net take-home earnings directly.</strong>
-                </p>
-              </div>
-
-              {/* Dynamic Fee Inputs for Active Board */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-800">
-                    {activeBoardTab} Monthly Fee Charges:
-                  </span>
-                  <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
-                    {activeBoardTab} Curriculum
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {/* 1. Class 1st to 7th: All Subjects Fee */}
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5">
-                    <span className="block text-[11px] font-bold text-slate-800">
-                      Class 1st to 7th
-                    </span>
-                    <span className="block text-[10px] text-slate-500 font-medium">
-                      All Subjects (Monthly Fee)
-                    </span>
-                    <div className="relative flex items-center">
-                      <span className="absolute left-2.5 text-xs font-bold text-slate-500">₹</span>
-                      <input
-                        type="number"
-                        required
-                        min="500"
-                        step="100"
-                        value={activeBoardTab === 'CBSE' ? feeCbse1to7 : feeIcse1to7}
-                        onChange={(e) => {
-                          if (activeBoardTab === 'CBSE') setFeeCbse1to7(e.target.value);
-                          else setFeeIcse1to7(e.target.value);
-                        }}
-                        placeholder={activeBoardTab === 'CBSE' ? '1500' : '1800'}
-                        className="w-full pl-7 pr-2.5 py-1.5 text-xs font-bold text-slate-900 rounded-lg border border-slate-300 bg-white focus:border-blue-500 outline-none"
-                      />
-                    </div>
-                    <div className="text-[10px] text-slate-500 font-medium pt-0.5">
-                      Net Take-Home (80%):{' '}
-                      <strong className="text-emerald-700 font-bold">
-                        ₹
-                        {Math.round(
-                          (Number(activeBoardTab === 'CBSE' ? feeCbse1to7 : feeIcse1to7) || 0) * 0.8
-                        )}
-                        /mo
-                      </strong>
-                    </div>
-                  </div>
-
-                  {/* 2. Class 8th to 10th: Per Subject Fee */}
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5">
-                    <span className="block text-[11px] font-bold text-slate-800">
-                      Class 8th to 10th
-                    </span>
-                    <span className="block text-[10px] text-slate-500 font-medium">
-                      Per Subject Fee (Monthly)
-                    </span>
-                    <div className="relative flex items-center">
-                      <span className="absolute left-2.5 text-xs font-bold text-slate-500">₹</span>
-                      <input
-                        type="number"
-                        required
-                        min="500"
-                        step="100"
-                        value={activeBoardTab === 'CBSE' ? feeCbse8to10 : feeIcse8to10}
-                        onChange={(e) => {
-                          if (activeBoardTab === 'CBSE') setFeeCbse8to10(e.target.value);
-                          else setFeeIcse8to10(e.target.value);
-                        }}
-                        placeholder={activeBoardTab === 'CBSE' ? '2000' : '2200'}
-                        className="w-full pl-7 pr-2.5 py-1.5 text-xs font-bold text-slate-900 rounded-lg border border-slate-300 bg-white focus:border-blue-500 outline-none"
-                      />
-                    </div>
-                    <div className="text-[10px] text-slate-500 font-medium pt-0.5">
-                      Net Take-Home (80%):{' '}
-                      <strong className="text-emerald-700 font-bold">
-                        ₹
-                        {Math.round(
-                          (Number(activeBoardTab === 'CBSE' ? feeCbse8to10 : feeIcse8to10) || 0) * 0.8
-                        )}
-                        /sub
-                      </strong>
-                    </div>
-                  </div>
-
-                  {/* 3. Class 11th & 12th: Per Subject Fee */}
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5">
-                    <span className="block text-[11px] font-bold text-slate-800">
-                      Class 11th &amp; 12th
-                    </span>
-                    <span className="block text-[10px] text-slate-500 font-medium">
-                      Per Subject Fee (Monthly)
-                    </span>
-                    <div className="relative flex items-center">
-                      <span className="absolute left-2.5 text-xs font-bold text-slate-500">₹</span>
-                      <input
-                        type="number"
-                        required
-                        min="500"
-                        step="100"
-                        value={activeBoardTab === 'CBSE' ? feeCbse11to12 : feeIcse11to12}
-                        onChange={(e) => {
-                          if (activeBoardTab === 'CBSE') setFeeCbse11to12(e.target.value);
-                          else setFeeIcse11to12(e.target.value);
-                        }}
-                        placeholder={activeBoardTab === 'CBSE' ? '3000' : '3200'}
-                        className="w-full pl-7 pr-2.5 py-1.5 text-xs font-bold text-slate-900 rounded-lg border border-slate-300 bg-white focus:border-blue-500 outline-none"
-                      />
-                    </div>
-                    <div className="text-[10px] text-slate-500 font-medium pt-0.5">
-                      Net Take-Home (80%):{' '}
-                      <strong className="text-emerald-700 font-bold">
-                        ₹
-                        {Math.round(
-                          (Number(activeBoardTab === 'CBSE' ? feeCbse11to12 : feeIcse11to12) || 0) * 0.8
-                        )}
-                        /sub
-                      </strong>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
-              {/* Teaching Experience with Fresher Option */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Total Teaching Experience <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={experienceYears}
-                  onChange={(e) => setExperienceYears(e.target.value)}
-                  className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all bg-white font-semibold text-slate-800"
-                >
-                  <option value="Fresher">Fresher (New to Teaching)</option>
-                  <option value="1-2 years">1-2 years</option>
-                  <option value="3-5 years">3-5 years</option>
-                  <option value="5-8 years">5-8 years</option>
-                  <option value="8+ years">8+ years</option>
-                </select>
-              </div>
-
-              {/* Class Timings Schedule (Standardized by Kumari Institute) */}
-              <div className="bg-blue-50/70 border border-blue-200/80 rounded-2xl p-3.5 space-y-2">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-[#0c2340]">
-                  <Clock className="w-3.5 h-3.5 text-[#1d4ed8]" />
-                  <span>Standard Class Timings Schedule</span>
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="p-2 rounded-xl bg-white border border-blue-100 shadow-2xs">
-                    <span className="block text-[10px] text-slate-500 font-bold uppercase">1st - 2nd Class</span>
-                    <span className="block text-xs font-black text-[#1d4ed8]">1 hr</span>
-                  </div>
-                  <div className="p-2 rounded-xl bg-white border border-blue-100 shadow-2xs">
-                    <span className="block text-[10px] text-slate-500 font-bold uppercase">3rd - 4th Class</span>
-                    <span className="block text-xs font-black text-[#1d4ed8]">1.30 hr</span>
-                  </div>
-                  <div className="p-2 rounded-xl bg-white border border-blue-100 shadow-2xs">
-                    <span className="block text-[10px] text-slate-500 font-bold uppercase">5th Class &amp; Above</span>
-                    <span className="block text-xs font-black text-[#1d4ed8]">2 hr</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Languages Known */}
-            <div className="pt-2 border-t border-slate-100">
-              <label className="block text-xs font-semibold text-slate-700 mb-2">
-                Languages You Speak with Students
-              </label>
-              <div className="flex flex-wrap items-center gap-4 text-xs">
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={languages.english}
-                    onChange={(e) =>
-                      setLanguages((prev) => ({ ...prev, english: e.target.checked }))
-                    }
-                    className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
-                  />
-                  <span>English</span>
-                </label>
-
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={languages.hindi}
-                    onChange={(e) =>
-                      setLanguages((prev) => ({ ...prev, hindi: e.target.checked }))
-                    }
-                    className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
-                  />
-                  <span>Hindi</span>
-                </label>
-
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={languages.odia}
-                    onChange={(e) =>
-                      setLanguages((prev) => ({ ...prev, odia: e.target.checked }))
-                    }
-                    className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
-                  />
-                  <span>Odia</span>
-                </label>
-
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={languages.other}
-                    onChange={(e) =>
-                      setLanguages((prev) => ({ ...prev, other: e.target.checked }))
-                    }
-                    className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
-                  />
-                  <span>Other</span>
-                </label>
-
-                {languages.other && (
-                  <input
-                    type="text"
-                    value={otherLanguageText}
-                    onChange={(e) => setOtherLanguageText(e.target.value)}
-                    placeholder="e.g. Telugu"
-                    className="px-2.5 py-1 text-xs rounded-lg border border-slate-200 outline-none focus:border-blue-500 w-28"
-                  />
-                )}
-              </div>
-            </div>
-
-            {/* 1-Hour Availability Checklist */}
-            <div className="pt-2 border-t border-slate-100 space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-800">
-                  Available Time Slots (1-Hour Intervals) <span className="text-red-500">*</span>
-                </label>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  Select the hours when you can take home tuition sessions (6:00 AM to 9:00 PM)
-                </p>
-              </div>
-
-              {/* 1-Hour Checklist Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-1">
-                {AVAILABLE_1HR_SLOTS.map((slot) => {
-                  const isSelected = availableTimeSlots.includes(slot);
-                  return (
-                    <label
-                      key={slot}
-                      className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-xs cursor-pointer transition-all ${
-                        isSelected
-                          ? 'border-blue-500 bg-blue-50/70 text-blue-900 font-semibold shadow-2xs'
-                          : 'border-slate-200/90 hover:border-slate-300 bg-white text-slate-700'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => handleToggleSlot(slot)}
-                        className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300 cursor-pointer"
-                      />
-                      <Clock
-                        className={`w-3.5 h-3.5 shrink-0 ${
-                          isSelected ? 'text-blue-600' : 'text-slate-400'
-                        }`}
-                      />
-                      <span className="truncate">{slot}</span>
-                    </label>
-                  );
-                })}
-              </div>
-
-              <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
-                <span>
-                  Selected:{' '}
-                  <strong className="text-blue-600 font-bold">{availableTimeSlots.length}</strong> of{' '}
-                  {AVAILABLE_1HR_SLOTS.length} slots
-                </span>
-                {availableTimeSlots.length === 0 && (
-                  <span className="text-amber-600 font-semibold">
-                    Please select at least one hour slot
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* SECTION 6: About Yourself */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-6 shadow-xs space-y-4">
-            <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
-              <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                <FileText className="w-4 h-4" />
-              </div>
-              <div>
-                <h2 className="text-base font-bold text-slate-900">About Yourself</h2>
-                <p className="text-xs text-slate-500">
-                  Introduce your teaching style and philosophy to parents in Rayagada
-                </p>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                About Yourself (Short Bio) <span className="text-red-500">*</span>
-              </label>
-              <textarea
-                rows={3}
-                value={bio}
-                onChange={(e) => setBio(e.target.value)}
-                placeholder="Tell parents and students about your pedagogical style, how you conduct homework revisions, and your experience..."
-                required
-                className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
-              />
-              <span className="text-[10px] text-slate-400 block mt-1">
-                {bio.length} characters (min 30 recommended)
-              </span>
-            </div>
-          </div>
+          {/* SECTION 5: Available Time Slots (1-Hour Intervals) */}
+          {renderTimeSlotsSection()}
 
           {/* SECTION 7: KYC Verification */}
           <div className="bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-6 shadow-xs space-y-4">
@@ -2807,6 +2955,8 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
             </button>
           </div>
         </form>
+      </>
+    )}
       </div>
     </div>
   );

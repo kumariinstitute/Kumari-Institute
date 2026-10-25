@@ -190,60 +190,6 @@ export const TutorProfileModal: React.FC<TutorProfileModalProps> = ({
             </div>
           </div>
 
-          {/* Modern Class-wise Monthly Tuition Fee Structure */}
-          <div className="rounded-2xl border border-slate-200/90 overflow-hidden space-y-0">
-            <div className="bg-slate-50 p-3.5 border-b border-slate-200 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Award className="w-4 h-4 text-emerald-600" />
-                <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
-                  Monthly Home Tuition Fee Structure
-                </h4>
-              </div>
-              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                Transparent Monthly Rates
-              </span>
-            </div>
-
-            <div className="p-4 space-y-3">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                <div className="p-3 rounded-xl bg-blue-50/80 border border-blue-200/70 text-center">
-                  <span className="text-[10px] font-bold uppercase text-blue-700 tracking-wider block">1st to 5th</span>
-                  <span className="text-base font-black text-slate-900 block mt-0.5">
-                    ₹{((tutor as any).customFeeSchedule?.primary1to5 || (tutor as any).feePrimary1to5 || tutor.monthlyFee || 1500).toLocaleString('en-IN')}
-                  </span>
-                  <span className="text-[10px] text-slate-500 font-medium">/ month</span>
-                </div>
-
-                <div className="p-3 rounded-xl bg-indigo-50/80 border border-indigo-200/70 text-center">
-                  <span className="text-[10px] font-bold uppercase text-indigo-700 tracking-wider block">6th to 8th</span>
-                  <span className="text-base font-black text-slate-900 block mt-0.5">
-                    ₹{((tutor as any).customFeeSchedule?.middle6to8 || (tutor as any).feeMiddle6to8 || 1800).toLocaleString('en-IN')}
-                  </span>
-                  <span className="text-[10px] text-slate-500 font-medium">/ month</span>
-                </div>
-
-                <div className="p-3 rounded-xl bg-purple-50/80 border border-purple-200/70 text-center">
-                  <span className="text-[10px] font-bold uppercase text-purple-700 tracking-wider block">9th to 10th</span>
-                  <span className="text-base font-black text-slate-900 block mt-0.5">
-                    ₹{((tutor as any).customFeeSchedule?.secondary9to10 || (tutor as any).feeSecondary9to10 || 2500).toLocaleString('en-IN')}
-                  </span>
-                  <span className="text-[10px] text-slate-500 font-medium">/ month</span>
-                </div>
-
-                <div className="p-3 rounded-xl bg-emerald-50/80 border border-emerald-200/70 text-center">
-                  <span className="text-[10px] font-bold uppercase text-emerald-700 tracking-wider block">11th &amp; 12th</span>
-                  <span className="text-base font-black text-slate-900 block mt-0.5">
-                    ₹{((tutor as any).customFeeSchedule?.senior11to12 || (tutor as any).feeSenior11to12 || 3000).toLocaleString('en-IN')}
-                  </span>
-                  <span className="text-[10px] text-slate-500 font-medium">/ subject / mo</span>
-                </div>
-              </div>
-              <p className="text-[11px] text-slate-500 text-center">
-                * All tuition fees are billed per month on a 28-day billing cycle with personalized 1-on-1 home attention.
-              </p>
-            </div>
-          </div>
-
           {/* Privacy & Safety Guarantee */}
           <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center gap-3">
             <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />

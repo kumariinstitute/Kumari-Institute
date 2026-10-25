@@ -26,7 +26,7 @@ import {
   serverTimestamp,
   arrayUnion
 } from "firebase/firestore";
-import { auth, db, FIRESTORE_DATABASE_ID, verifyFirestoreConnection } from "../lib/firebase";
+import { auth, db, defaultDb, allDbInstances, FIRESTORE_DATABASE_ID, verifyFirestoreConnection } from "../lib/firebase";
 import { Tutor, TutorReview } from "../data/tutorsData";
 import { AdminSuccessStory, AdminActivityLog } from "../types";
 
@@ -849,11 +849,12 @@ export async function updateTeacherProfileInFirestore(uid: string, profileData: 
     profileData.availableTimeSlots ||
     ['05:00 PM - 06:00 PM', '06:00 PM - 07:00 PM'];
 
-  // Check if this tutor was already approved previously by Admin
+  // Check if this tutor was already approved previously by Admin or is updating an already submitted profile
   const isAlreadyApproved = Boolean(
     profileData.isApproved === true ||
     profileData.status === 'approved' ||
     profileData.verified === true ||
+    profileData.isAlreadyCompleted === true ||
     isTeacherApprovedInRegistry(uid, profileData.id, profileData.email, profileData.phone)
   );
 
@@ -878,29 +879,37 @@ export async function updateTeacherProfileInFirestore(uid: string, profileData: 
     updatedAt: new Date().toISOString()
   });
 
-  // 1. Keep teachers collection updated
-  try {
-    await setDoc(teacherRef, completePayload, { merge: true });
-  } catch (err) {
-    console.warn('teachers collection write notice:', err);
+  // 1. Keep teachers collection updated across all databases
+  for (const dbInst of allDbInstances) {
+    try {
+      await setDoc(doc(dbInst, "teachers", uid), completePayload, { merge: true });
+    } catch (err) {
+      console.warn('teachers collection write notice:', err);
+    }
   }
 
-  // 2. Store in tutors_requests collection for admin review (if not yet approved)
+  // 2. If first time (not approved), store in tutors_requests for admin review.
+  // If already approved or second update, directly update complete_tutors and remove from tutors_requests!
   if (!isAlreadyApproved) {
-    try {
-      const tutorRequestRef = doc(db, "tutors_requests", uid);
-      await setDoc(tutorRequestRef, completePayload, { merge: true });
-      console.log(`[Firestore] Profile submitted and waiting in tutors_requests for admin review: ${completePayload.name || uid}`);
-    } catch (err) {
-      console.warn('tutors_requests save notice:', err);
+    for (const dbInst of allDbInstances) {
+      try {
+        const tutorRequestRef = doc(dbInst, "tutors_requests", uid);
+        await setDoc(tutorRequestRef, completePayload, { merge: true });
+      } catch (err) {
+        console.warn('tutors_requests save notice:', err);
+      }
     }
   } else {
-    // If already approved, sync with complete_tutors (Tutors Directory)
-    try {
-      const completeDocRef = doc(db, "complete_tutors", uid);
-      await setDoc(completeDocRef, completePayload, { merge: true });
-    } catch (err) {
-      console.warn('complete_tutors save notice:', err);
+    for (const dbInst of allDbInstances) {
+      try {
+        const completeDocRef = doc(dbInst, "complete_tutors", uid);
+        await setDoc(completeDocRef, completePayload, { merge: true });
+        // Clean up from tutors_requests so it does not ask for re-verification
+        await deleteDoc(doc(dbInst, "tutors_requests", uid)).catch(() => {});
+        await deleteDoc(doc(dbInst, "tutor_requests", uid)).catch(() => {});
+      } catch (err) {
+        console.warn('complete_tutors save notice:', err);
+      }
     }
   }
 
@@ -2192,168 +2201,151 @@ export function subscribeToFirebaseAuth(onUserChange: (user: AppUserProfile | nu
  * STRICT RULE: Only genuine tutors accepted by admin (isApproved === true or status === 'approved')
  * will show on the "Find Home Tutor" page as per user requirement!
  */
+/**
+ * Real-time listener for verified genuine teachers from Firestore collections:
+ * 'complete_tutors', 'confirm_tutors_details', and 'teachers'.
+ * Ensures ALL tutors present in the "Confirm Tutors Details" admin section appear on the "Find Tutors" page!
+ */
 export function subscribeToRealtimeTeachers(onTeachersUpdate: (teachers: Tutor[]) => void): () => void {
-  try {
-    const teachersCol = collection(db, "teachers");
-    return onSnapshot(
-      teachersCol,
-      (snapshot) => {
-        const teachers: Tutor[] = [];
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          const docId = docSnap.id.toLowerCase();
-          // Exclude any fake/prototype placeholder tutor IDs
-          if (
-            docId.includes("priya-sharma") ||
-            docId.includes("rakesh-tripathy") ||
-            docId.includes("sneha-patel") ||
-            docId.includes("sagar-das") ||
-            docId.includes("anita-mohanty")
-          ) {
-            return;
-          }
-          // STRICT RULE: Only genuine tutors accepted and verified by admin show on Find Home Tutor page
-          const rawName = (data.fullName || data.name || '').trim();
-          if (!rawName || rawName.toLowerCase() === 'educator') {
-            return; // Skip invalid or placeholder dummy profiles
-          }
-          if (docId.includes('sukumar') || docId.includes('fb_teacher')) {
-            return; // Skip dummy or placeholder IDs
-          }
+  const teachersMap = new Map<string, Tutor>();
 
-          const isApproved = Boolean(
-            (data.verified === true && (data.isApproved === true || data.status === 'approved')) ||
-            (data.isApproved === true && data.status === 'approved')
-          );
-          if (!isApproved || data.status === 'rejected' || data.verified === false) {
-            return; // Skip unverified or pending tutors
-          }
-
-          teachers.push({
-            id: docSnap.id,
-            name: rawName,
-            email: data.email,
-            phone: data.phone,
-            qualification: data.highestQualification || data.qualification || "",
-            experienceYears: typeof data.experienceYears === 'number' ? data.experienceYears : 0,
-            experienceText: (String(data.experienceText || data.experience || data.totalExperience || '')).toLowerCase().includes('fresher')
-              ? 'Fresher'
-              : (typeof data.experienceYears === 'number' && data.experienceYears > 0 ? `${data.experienceYears}+ Yrs Exp` : 'Fresher'),
-            subjects: Array.isArray(data.subjects) ? data.subjects : [],
-            distanceKm: 0,
-            availabilityText: data.availabilityText || "Available for Home Tuition",
-            availabilityType: "available_now",
-            availabilityBadge: "Verified Genuine Home Tutor",
-            rating: typeof data.rating === 'number' ? data.rating : 4.9,
-            reviewCount: typeof data.reviewCount === 'number' ? data.reviewCount : 1,
-            monthlyFee: ((typeof data.hourlyRate === 'number' && data.hourlyRate > 0) || (typeof data.hourlyCharges === 'number' && data.hourlyCharges > 0) || (typeof data.hourlyFee === 'number' && data.hourlyFee > 0))
-              ? ((typeof data.hourlyRate === 'number' && data.hourlyRate > 0 ? data.hourlyRate : (typeof data.hourlyCharges === 'number' && data.hourlyCharges > 0 ? data.hourlyCharges : (data.hourlyFee || 100))) * 30)
-              : (typeof data.monthlyFee === 'number' && data.monthlyFee > 0 ? data.monthlyFee : 3000),
-            hourlyRate: typeof data.hourlyRate === 'number' && data.hourlyRate > 0
-              ? data.hourlyRate
-              : (typeof data.hourlyCharges === 'number' && data.hourlyCharges > 0
-                  ? data.hourlyCharges
-                  : (typeof data.hourlyFee === 'number' && data.hourlyFee > 0
-                      ? data.hourlyFee
-                      : (typeof data.monthlyFee === 'number' && data.monthlyFee > 0
-                          ? Math.round(data.monthlyFee / 30)
-                          : 100))),
-            bio: data.bio || "",
-            avatar: data.avatar || data.photoUrl || "",
-            classesHandled: Array.isArray(data.classesHandled) ? data.classesHandled : [],
-            boardsSupported: Array.isArray(data.boardsSupported) ? data.boardsSupported : [],
-            locationArea: data.locationArea || data.locality || "Rayagada",
-            addressSnippet: data.address || data.addressSnippet || data.locality || "",
-            address: data.address || data.addressSnippet || (data.locationArea ? `${data.locationArea}, Rayagada, Odisha` : "Rayagada, Odisha"),
-            locality: data.locality || data.locationArea || "Rayagada",
-            addressDetails: data.addressDetails || {
-              line1: data.addressDetails?.line1 || data.addressLine1 || "",
-              street: data.addressDetails?.street || data.locationArea || data.locality || "Rayagada",
-              landmark: data.addressDetails?.landmark || data.landmark || "Rayagada",
-              city: data.addressDetails?.city || "Rayagada",
-              state: data.addressDetails?.state || "Odisha",
-              pincode: data.addressDetails?.pincode || "765001",
-              latitude: typeof data.latitude === 'number' ? data.latitude : 19.1691,
-              longitude: typeof data.longitude === 'number' ? data.longitude : 83.4150
-            },
-            verified: true,
-            status: 'approved',
-            isApproved: true,
-            isBooked: Boolean(data.isBooked),
-            bookingStatus: data.isBooked ? 'booked' : 'available',
-            verificationStatus: 'Verified Genuine Tutor',
-            latitude: typeof data.latitude === 'number' ? data.latitude : 19.1691,
-            longitude: typeof data.longitude === 'number' ? data.longitude : 83.4150,
-            gender: data.gender === "male" ? "male" : "female",
-            teacherType: data.teacherType === "both" ? "both" : "home",
-            teachingHighlights: Array.isArray(data.teachingHighlights) ? data.teachingHighlights : [],
-            educationDetails: data.educationDetails,
-            aadhaarNumber: data.aadhaarNumber,
-            aadhaarDocUrl: data.aadhaarDocUrl,
-            customFeeSchedule: data.customFeeSchedule,
-            feeClass1to7: data.feeClass1to7 || data.customFeeSchedule?.cbse?.class1to7 || data.customFeeSchedule?.primary1to7 || data.feePrimary1to5,
-            feeClass8to10: data.feeClass8to10 || data.customFeeSchedule?.cbse?.class8to10 || data.customFeeSchedule?.middle8to10 || data.feeSecondary9to10,
-            feeClass11to12: data.feeClass11to12 || data.customFeeSchedule?.cbse?.class11to12 || data.customFeeSchedule?.senior11to12 || data.feeSenior11to12,
-            boards: data.boards || data.boardsSupported || data.customFeeSchedule?.boards || ['CBSE', 'ICSE'],
-            availableTimeSlots: Array.isArray(data.availableTimeSlots) ? data.availableTimeSlots : [],
-            reviews: Array.isArray(data.reviews) ? data.reviews : []
-          });
-        });
-
-        if (teachers.length > 0) {
-          onTeachersUpdate(teachers);
-        } else {
-          // If Firestore collection has not yet loaded or returned records, fall back to persistent server store
-          fetch('/api/teachers')
-            .then((r) => r.json())
-            .then((serverTeachers: any[]) => {
-              if (Array.isArray(serverTeachers) && serverTeachers.length > 0) {
-                const approved = serverTeachers.filter(
-                  (t) => (t.verified === true && (t.isApproved === true || t.status === 'approved')) || (t.isApproved === true && t.status === 'approved')
-                );
-                onTeachersUpdate(approved);
-              } else {
-                onTeachersUpdate([]);
-              }
-            })
-            .catch(() => onTeachersUpdate([]));
-        }
-      },
-      (err) => {
-        console.warn("[Firestore Realtime] Notice on teachers snapshot:", err?.message || err);
-        // Fall back to persistent server store
-        fetch('/api/teachers')
-          .then((r) => r.json())
-          .then((serverTeachers: any[]) => {
-            if (Array.isArray(serverTeachers) && serverTeachers.length > 0) {
-              const approved = serverTeachers.filter(
-                (t) => (t.verified === true && (t.isApproved === true || t.status === 'approved')) || (t.isApproved === true && t.status === 'approved')
-              );
-              onTeachersUpdate(approved);
-            } else {
-              onTeachersUpdate([]);
-            }
-          })
-          .catch(() => onTeachersUpdate([]));
-      }
-    );
-  } catch (err) {
-    console.warn("[Firestore Realtime] subscribeToRealtimeTeachers setup notice:", err);
-    fetch('/api/teachers')
-      .then((r) => r.json())
-      .then((serverTeachers: any[]) => {
-        if (Array.isArray(serverTeachers) && serverTeachers.length > 0) {
-          const approved = serverTeachers.filter(
-            (t) => (t.verified === true && (t.isApproved === true || t.status === 'approved')) || (t.isApproved === true && t.status === 'approved')
-          );
-          onTeachersUpdate(approved);
-        } else {
-          onTeachersUpdate([]);
-        }
+  const emit = () => {
+    const list = Array.from(teachersMap.values())
+      .filter((t) => {
+        return Boolean(
+          t.isApproved === true ||
+          t.status === 'approved' ||
+          (t.verified === true && t.status !== 'rejected')
+        );
       })
-      .catch(() => onTeachersUpdate([]));
-    return () => {};
-  }
+      .sort((a, b) => {
+        const timeA = new Date((a as any).updatedAt || a.createdAt || 0).getTime();
+        const timeB = new Date((b as any).updatedAt || b.createdAt || 0).getTime();
+        return timeB - timeA;
+      });
+
+    onTeachersUpdate(list);
+  };
+
+  // Pre-load from server endpoint
+  fetch('/api/teachers')
+    .then((r) => r.json())
+    .then((serverTeachers: any[]) => {
+      if (Array.isArray(serverTeachers)) {
+        serverTeachers.forEach((t) => {
+          if (t && t.id && (t.isApproved || t.status === 'approved' || t.verified)) {
+            teachersMap.set(t.id, t);
+          }
+        });
+        emit();
+      }
+    })
+    .catch(() => {});
+
+  const unsubscribers: (() => void)[] = [];
+  const tutorCollections = ['complete_tutors', 'confirm_tutors_details', 'confirm_tutors', 'teachers'];
+
+  allDbInstances.forEach((dbInst) => {
+    tutorCollections.forEach((colName) => {
+      try {
+        const colRef = collection(dbInst, colName);
+        const unsub = onSnapshot(
+          colRef,
+          (snapshot) => {
+            snapshot.forEach((docSnap) => {
+              const data = docSnap.data();
+              if (!data) return;
+
+              const docId = docSnap.id;
+              const rawName = (data.fullName || data.name || '').trim();
+              if (!rawName || rawName.toLowerCase() === 'educator') return;
+
+              // Any tutor in complete_tutors or confirm_tutors_details is an approved tutor!
+              const isConfirmedCollection = colName === 'complete_tutors' || colName === 'confirm_tutors_details' || colName === 'confirm_tutors';
+              const isApproved = Boolean(
+                isConfirmedCollection ||
+                data.isApproved === true ||
+                data.status === 'approved' ||
+                data.verified === true
+              );
+
+              if (!isApproved || data.status === 'rejected') return;
+
+              const monthlyFee = ((typeof data.hourlyRate === 'number' && data.hourlyRate > 0) || (typeof data.hourlyCharges === 'number' && data.hourlyCharges > 0) || (typeof data.hourlyFee === 'number' && data.hourlyFee > 0))
+                ? ((typeof data.hourlyRate === 'number' && data.hourlyRate > 0 ? data.hourlyRate : (typeof data.hourlyCharges === 'number' && data.hourlyCharges > 0 ? data.hourlyCharges : (data.hourlyFee || 100))) * 30)
+                : (typeof data.monthlyFee === 'number' && data.monthlyFee > 0 ? data.monthlyFee : (Number(data.feeAmount) || 3000));
+
+              const tutorObj: Tutor = {
+                id: docId,
+                name: rawName,
+                email: data.email,
+                phone: data.phone,
+                qualification: data.highestQualification || data.qualification || "Graduate Faculty",
+                experienceYears: typeof data.experienceYears === 'number' ? data.experienceYears : 0,
+                experienceText: (String(data.experienceText || data.experience || data.totalExperience || '')).toLowerCase().includes('fresher')
+                  ? 'Fresher'
+                  : (typeof data.experienceYears === 'number' && data.experienceYears > 0 ? `${data.experienceYears}+ Yrs Exp` : 'Experienced Tutor'),
+                subjects: Array.isArray(data.subjects) && data.subjects.length > 0 ? data.subjects : ['Foundational Subjects'],
+                distanceKm: 0,
+                availabilityText: data.availabilityText || "Available for Home Tuition",
+                availabilityType: "available_now",
+                availabilityBadge: "Verified Genuine Home Tutor",
+                rating: typeof data.rating === 'number' && data.rating > 0 ? data.rating : 4.9,
+                reviewCount: typeof data.reviewCount === 'number' && data.reviewCount > 0 ? data.reviewCount : 5,
+                monthlyFee,
+                hourlyRate: typeof data.hourlyRate === 'number' && data.hourlyRate > 0 ? data.hourlyRate : Math.round(monthlyFee / 30),
+                bio: data.bio || `Passionate tutor offering dedicated doorstep tuition in Rayagada.`,
+                avatar: data.avatar || data.photoUrl || '/src/assets/images/tutor_priya_sharma_1789370534007.jpg',
+                classesHandled: Array.isArray(data.classesHandled) && data.classesHandled.length > 0 ? data.classesHandled : ['1st - 10th Class'],
+                boardsSupported: Array.isArray(data.boardsSupported) && data.boardsSupported.length > 0 ? data.boardsSupported : ['CBSE', 'ICSE'],
+                locationArea: data.locationArea || data.locality || "Rayagada",
+                addressSnippet: data.address || data.addressSnippet || data.locality || "Rayagada",
+                address: data.address || (data.locationArea ? `${data.locationArea}, Rayagada, Odisha` : "Rayagada, Odisha"),
+                locality: data.locality || data.locationArea || "Rayagada",
+                verified: true,
+                status: 'approved',
+                isApproved: true,
+                isBooked: Boolean(data.isBooked),
+                bookingStatus: data.isBooked ? 'booked' : 'available',
+                verificationStatus: 'Verified Genuine Tutor',
+                latitude: typeof data.latitude === 'number' && !isNaN(data.latitude) ? data.latitude : 19.1691,
+                longitude: typeof data.longitude === 'number' && !isNaN(data.longitude) ? data.longitude : 83.4150,
+                gender: data.gender === "male" ? "male" : "female",
+                teacherType: data.teacherType === "both" ? "both" : "home",
+                teachingHighlights: Array.isArray(data.teachingHighlights) ? data.teachingHighlights : [],
+                educationDetails: data.educationDetails,
+                customFeeSchedule: data.customFeeSchedule,
+                feeClass1to7: data.feeClass1to7 || data.customFeeSchedule?.cbse?.class1to7 || data.customFeeSchedule?.primary1to7 || monthlyFee,
+                feeClass8to10: data.feeClass8to10 || data.customFeeSchedule?.cbse?.class8to10 || data.customFeeSchedule?.middle8to10 || 2000,
+                feeClass11to12: data.feeClass11to12 || data.customFeeSchedule?.cbse?.class11to12 || data.customFeeSchedule?.senior11to12 || 3000,
+                boards: data.boards || data.boardsSupported || ['CBSE', 'ICSE'],
+                availableTimeSlots: Array.isArray(data.availableTimeSlots) ? data.availableTimeSlots : (data.availableTimings || []),
+                reviews: Array.isArray(data.reviews) ? data.reviews : [],
+                profileCompleted: true
+              };
+
+              teachersMap.set(docId, tutorObj);
+            });
+            emit();
+          },
+          (err) => {
+            console.warn(`Firestore ${colName} real-time notice:`, err);
+          }
+        );
+        unsubscribers.push(unsub);
+      } catch (e) {
+        console.warn(`Firestore ${colName} listener setup notice:`, e);
+      }
+    });
+  });
+
+  return () => {
+    unsubscribers.forEach((fn) => {
+      try {
+        fn();
+      } catch {}
+    });
+  };
 }
 
 export interface FirestoreNoticeInfo {
@@ -2638,30 +2630,26 @@ const FAKE_PARENT_PATTERNS = [
 export function isFakeParent(data: any): boolean {
   if (!data) return true;
   const id = String(data.uid || data.id || '').toLowerCase();
-  const name = String(data.fullName || data.name || '').toLowerCase().trim();
+  const name = String(data.fullName || data.name || data.parentName || '').toLowerCase().trim();
   const email = String(data.email || '').toLowerCase().trim();
+  const phone = String(data.phone || data.mobile || '').trim();
 
-  // Only reject truly empty or dummy test placeholder objects
-  if (!name && !email) {
+  if (id.includes('dummy_parent') || id.includes('sample_mock') || id.includes('fake_placeholder_mock')) {
     return true;
   }
   if (name === 'sample parent' || name === 'dummy parent' || name === 'test parent dummy') {
     return true;
   }
-  if (id.includes('dummy_parent') || id.includes('sample_mock')) {
-    return true;
-  }
 
-  for (const pattern of FAKE_PARENT_PATTERNS) {
-    if (id.includes(pattern) || name.includes(pattern)) {
-      return true;
-    }
+  // Genuine parent has at least one identifier
+  if (!name && !email && !phone && !data.childName && !data.studentName) {
+    return true;
   }
   return false;
 }
 
 /**
- * Admin Real-time listener for registered parents directly from Firestore 'parents' collection (no users collection)
+ * Admin Real-time listener for registered parents directly from Firestore 'parents' collection across both databases
  */
 export function subscribeToAllParentsForAdmin(onParentsUpdate: (parents: AppUserProfile[]) => void): () => void {
   const parseFirestoreParent = (docId: string, data: any): AppUserProfile => {
@@ -2696,14 +2684,21 @@ export function subscribeToAllParentsForAdmin(onParentsUpdate: (parents: AppUser
       data.assignedEducator?.phone ||
       (bookedTutorsList.length > 0 ? bookedTutorsList[0]?.phone : '');
 
-    // Determine course
     const course =
       data.course ||
       (data.childGrade ? `${data.childGrade} Tuition` : 'Home Tuition');
 
+    const resolvedName =
+      data.fullName ||
+      data.name ||
+      data.parentName ||
+      (data.studentName ? `Parent of ${data.studentName}` : '') ||
+      (data.childName ? `Parent of ${data.childName}` : '') ||
+      (data.phone ? `Parent (${data.phone})` : 'Registered Parent');
+
     return {
       uid: docId || data.uid || data.id || `parent_${Date.now()}`,
-      name: data.fullName || data.name || "Registered Parent",
+      name: resolvedName,
       email: data.email || "",
       role: "parent",
       phone: data.phone || data.mobile || "",
@@ -2738,23 +2733,27 @@ export function subscribeToAllParentsForAdmin(onParentsUpdate: (parents: AppUser
 
   const emit = () => {
     const rawList = Array.from(parentsMap.values())
-      .filter((p) => !isFakeParent(p) && p.role === 'parent')
+      .filter((p) => !isFakeParent(p) && (p.role === 'parent' || !p.role))
       .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
-    // Deduplication by UID and normalized non-empty email
+    // Deduplication by UID and normalized non-empty email/phone
     const seenUids = new Set<string>();
     const seenEmails = new Set<string>();
+    const seenPhones = new Set<string>();
     const deduplicated: AppUserProfile[] = [];
 
     for (const p of rawList) {
       const email = (p.email || '').trim().toLowerCase();
       const uid = (p.uid || '').trim();
+      const cleanPhone = (p.phone || '').replace(/\D/g, '');
 
       if (uid && seenUids.has(uid)) continue;
       if (email && seenEmails.has(email)) continue;
+      if (cleanPhone && cleanPhone.length >= 10 && seenPhones.has(cleanPhone.slice(-10))) continue;
 
       if (uid) seenUids.add(uid);
       if (email) seenEmails.add(email);
+      if (cleanPhone && cleanPhone.length >= 10) seenPhones.add(cleanPhone.slice(-10));
 
       deduplicated.push(p);
     }
@@ -2768,9 +2767,9 @@ export function subscribeToAllParentsForAdmin(onParentsUpdate: (parents: AppUser
     .then((res) => {
       if (res?.success && Array.isArray(res.parents)) {
         res.parents.forEach((p: any) => {
-          if (!isFakeParent(p) && p.role === 'parent') {
+          if (!isFakeParent(p) && (p.role === 'parent' || !p.role)) {
             const parsed = parseFirestoreParent(p.uid || p.email, p);
-            const key = (parsed.uid || parsed.email || '').trim().toLowerCase();
+            const key = (parsed.uid || parsed.email || parsed.phone || '').trim().toLowerCase();
             if (key) parentsMap.set(key, parsed);
           }
         });
@@ -2781,57 +2780,59 @@ export function subscribeToAllParentsForAdmin(onParentsUpdate: (parents: AppUser
       console.warn("Server admin parents fetch notice:", err);
     });
 
-  // 2. Subscribe in real-time to Firestore parent collections ('parents', 'parent', 'registered_parents', 'users', etc.)
+  // 2. Subscribe in real-time to Firestore parent collections across all database instances (kumari-db and default)
   const unsubscribers: (() => void)[] = [];
   const parentCollections = ['parents', 'parent', 'registered_parents', 'users', 'parent_requests', 'parents_requests'];
 
-  parentCollections.forEach((colName) => {
-    try {
-      const pCol = collection(db, colName);
-      const unsub = onSnapshot(
-        pCol,
-        (snapshot) => {
-          snapshot.forEach((docSnap) => {
-            const data = docSnap.data();
-            if (!data) return;
+  allDbInstances.forEach((dbInst) => {
+    parentCollections.forEach((colName) => {
+      try {
+        const pCol = collection(dbInst, colName);
+        const unsub = onSnapshot(
+          pCol,
+          (snapshot) => {
+            snapshot.forEach((docSnap) => {
+              const data = docSnap.data();
+              if (!data) return;
 
-            if (colName === 'users') {
-              const isParent = Boolean(
-                data.role === 'parent' ||
-                data.userType === 'parent' ||
-                (!data.role && (data.childName || data.studentName || data.children || data.childGrade || data.childSchool || data.course))
-              );
-              if (isParent && data.role !== 'admin' && data.role !== 'teacher' && !isFakeParent(data) && !isFakeParent({ uid: docSnap.id })) {
-                const parsed = parseFirestoreParent(docSnap.id, data);
-                const key = (parsed.uid || parsed.email || '').trim().toLowerCase();
-                if (key) parentsMap.set(key, parsed);
+              if (colName === 'users') {
+                const isParent = Boolean(
+                  data.role === 'parent' ||
+                  data.userType === 'parent' ||
+                  (!data.role && (data.childName || data.studentName || data.children || data.childGrade || data.childSchool || data.course))
+                );
+                if (isParent && data.role !== 'admin' && data.role !== 'teacher' && !isFakeParent(data) && !isFakeParent({ uid: docSnap.id })) {
+                  const parsed = parseFirestoreParent(docSnap.id, data);
+                  const key = (parsed.uid || parsed.email || parsed.phone || '').trim().toLowerCase();
+                  if (key) parentsMap.set(key, parsed);
+                }
+              } else {
+                if (
+                  (data.role === 'parent' || !data.role) &&
+                  data.role !== 'admin' &&
+                  data.role !== 'teacher' &&
+                  !isFakeParent(data) &&
+                  !isFakeParent({ uid: docSnap.id })
+                ) {
+                  const parsed = parseFirestoreParent(docSnap.id, data);
+                  const key = (parsed.uid || parsed.email || parsed.phone || '').trim().toLowerCase();
+                  if (key) parentsMap.set(key, parsed);
+                }
               }
-            } else {
-              if (
-                (data.role === 'parent' || !data.role) &&
-                data.role !== 'admin' &&
-                data.role !== 'teacher' &&
-                !isFakeParent(data) &&
-                !isFakeParent({ uid: docSnap.id })
-              ) {
-                const parsed = parseFirestoreParent(docSnap.id, data);
-                const key = (parsed.uid || parsed.email || '').trim().toLowerCase();
-                if (key) parentsMap.set(key, parsed);
-              }
-            }
-          });
-          emit();
-        },
-        (err) => {
-          console.warn(`Firestore '${colName}' collection snapshot notice:`, err);
-          recordFirestoreNotice(err, colName);
-          emit();
-        }
-      );
-      unsubscribers.push(unsub);
-    } catch (err) {
-      console.warn(`Firestore '${colName}' listener init error:`, err);
-    }
+            });
+            emit();
+          },
+          (err) => {
+            console.warn(`Firestore '${colName}' snapshot notice:`, err);
+            recordFirestoreNotice(err, colName);
+            emit();
+          }
+        );
+        unsubscribers.push(unsub);
+      } catch (err) {
+        console.warn(`Firestore '${colName}' listener init error:`, err);
+      }
+    });
   });
 
   return () => {
@@ -3021,15 +3022,21 @@ export async function adminVerifyTutorInDatabase(
       await setDoc(tutorRef, approvalUpdates, { merge: true }).catch((err) => console.warn('Firestore tutor verify notice:', err));
       
       // Save full profile to complete_tutors so Tutors Directory has complete data
-      await setDoc(doc(db, "complete_tutors", tutorId), { ...existingData, ...approvalUpdates, id: tutorId, uid: rawUid || tutorId }, { merge: true }).catch(() => {});
-      if (rawUid && rawUid !== tutorId) {
-        await setDoc(doc(db, "complete_tutors", rawUid), { ...existingData, ...approvalUpdates, id: rawUid, uid: rawUid }, { merge: true }).catch(() => {});
-      }
+      for (const dbInst of allDbInstances) {
+        await setDoc(doc(dbInst, "complete_tutors", tutorId), { ...existingData, ...approvalUpdates, id: tutorId, uid: rawUid || tutorId }, { merge: true }).catch(() => {});
+        if (rawUid && rawUid !== tutorId) {
+          await setDoc(doc(dbInst, "complete_tutors", rawUid), { ...existingData, ...approvalUpdates, id: rawUid, uid: rawUid }, { merge: true }).catch(() => {});
+        }
 
-      // Explicitly remove this approved tutor from tutors_requests collection
-      await deleteDoc(doc(db, "tutors_requests", tutorId)).catch(() => {});
-      if (rawUid) {
-        await deleteDoc(doc(db, "tutors_requests", rawUid)).catch(() => {});
+        // Once tutor request is accepted by admin, remove them completely from tutors_requests collections
+        await deleteDoc(doc(dbInst, "tutors_requests", tutorId)).catch(() => {});
+        await deleteDoc(doc(dbInst, "tutor_requests", tutorId)).catch(() => {});
+        await deleteDoc(doc(dbInst, "tutor_request", tutorId)).catch(() => {});
+        if (rawUid) {
+          await deleteDoc(doc(dbInst, "tutors_requests", rawUid)).catch(() => {});
+          await deleteDoc(doc(dbInst, "tutor_requests", rawUid)).catch(() => {});
+          await deleteDoc(doc(dbInst, "tutor_request", rawUid)).catch(() => {});
+        }
       }
 
       // Cross-sync if teacher doc has email or linked uid
@@ -4655,38 +4662,40 @@ export function subscribeToTutorsRequests(
   const unsubscribers: (() => void)[] = [];
   const colNames = ['tutors_requests', 'tutor_requests', 'tutor_request', 'teachers'];
 
-  colNames.forEach((colName) => {
-    try {
-      const col = collection(db, colName);
-      const unsub = onSnapshot(
-        col,
-        (snapshot) => {
-          snapshot.forEach((d) => {
-            const data = d.data();
-            if (!data) return;
+  allDbInstances.forEach((dbInst) => {
+    colNames.forEach((colName) => {
+      try {
+        const col = collection(dbInst, colName);
+        const unsub = onSnapshot(
+          col,
+          (snapshot) => {
+            snapshot.forEach((d) => {
+              const data = d.data();
+              if (!data) return;
 
-            // If already approved, do not show in pending requests
-            const isApproved = Boolean(data.isApproved === true || data.status === 'approved');
-            if (isApproved) {
-              requestsMap.delete(d.id);
-              return;
-            }
+              // If already approved, do not show in pending requests
+              const isApproved = Boolean(data.isApproved === true || data.status === 'approved');
+              if (isApproved) {
+                requestsMap.delete(d.id);
+                return;
+              }
 
-            if (colName === 'teachers' && data.role && data.role !== 'teacher') return;
+              if (colName === 'teachers' && data.role && data.role !== 'teacher') return;
 
-            requestsMap.set(d.id, { id: d.id, ...data });
-          });
-          emit();
-        },
-        (err) => {
-          console.warn(`Firestore ${colName} listener notice:`, err);
-          recordFirestoreNotice(err, colName);
-        }
-      );
-      unsubscribers.push(unsub);
-    } catch (err) {
-      console.warn(`Firestore ${colName} setup error:`, err);
-    }
+              requestsMap.set(d.id, { id: d.id, ...data });
+            });
+            emit();
+          },
+          (err) => {
+            console.warn(`Firestore ${colName} listener notice:`, err);
+            recordFirestoreNotice(err, colName);
+          }
+        );
+        unsubscribers.push(unsub);
+      } catch (err) {
+        console.warn(`Firestore ${colName} setup error:`, err);
+      }
+    });
   });
 
   return () => {
@@ -4724,51 +4733,56 @@ export function subscribeToCompleteTutors(
     'teachers'
   ];
 
-  colNames.forEach((colName) => {
-    try {
-      const col = collection(db, colName);
-      const unsub = onSnapshot(
-        col,
-        (snapshot) => {
-          snapshot.forEach((d) => {
-            const data = d.data();
-            if (!data) return;
+  allDbInstances.forEach((dbInst) => {
+    colNames.forEach((colName) => {
+      try {
+        const col = collection(dbInst, colName);
+        const unsub = onSnapshot(
+          col,
+          (snapshot) => {
+            snapshot.forEach((d) => {
+              const data = d.data();
+              if (!data) return;
 
-            // STRICT RULE: Only include approved tutors in Tutors Directory!
-            const isApproved = Boolean(
-              data.isApproved === true ||
-              data.status === 'approved' ||
-              (data.verified === true && data.status !== 'pending' && data.status !== 'rejected')
-            );
-            if (!isApproved) {
-              tutorsMap.delete(d.id);
-              return;
-            }
+              // STRICT RULE: Only include approved tutors in Tutors Directory!
+              const isApproved = Boolean(
+                colName === 'complete_tutors' ||
+                colName === 'confirm_tutors_details' ||
+                colName === 'confirm_tutors' ||
+                data.isApproved === true ||
+                data.status === 'approved' ||
+                (data.verified === true && data.status !== 'pending' && data.status !== 'rejected')
+              );
+              if (!isApproved) {
+                tutorsMap.delete(d.id);
+                return;
+              }
 
-            const feeAmount =
-              Number(data.feeAmount) ||
-              Number(data.monthlyFee) ||
-              (Number(data.hourlyRate) ? Number(data.hourlyRate) * 30 : 3500);
+              const feeAmount =
+                Number(data.feeAmount) ||
+                Number(data.monthlyFee) ||
+                (Number(data.hourlyRate) ? Number(data.hourlyRate) * 30 : 3500);
 
-            tutorsMap.set(d.id, {
-              id: d.id,
-              ...data,
-              feeAmount,
-              availableTimings: data.availableTimings || data.selectedTimings || ['05:00 PM - 06:00 PM', '06:00 PM - 07:00 PM'],
-              assignedParentName: data.assignedParentName || (Array.isArray(data.assignedParents) && data.assignedParents[0]?.parentName) || ''
+              tutorsMap.set(d.id, {
+                id: d.id,
+                ...data,
+                feeAmount,
+                availableTimings: data.availableTimings || data.selectedTimings || ['05:00 PM - 06:00 PM', '06:00 PM - 07:00 PM'],
+                assignedParentName: data.assignedParentName || (Array.isArray(data.assignedParents) && data.assignedParents[0]?.parentName) || ''
+              });
             });
-          });
-          emit();
-        },
-        (err) => {
-          console.warn(`Firestore ${colName} listener notice:`, err);
-          recordFirestoreNotice(err, colName);
-        }
-      );
-      unsubscribers.push(unsub);
-    } catch (err) {
-      console.warn(`Firestore ${colName} setup error:`, err);
-    }
+            emit();
+          },
+          (err) => {
+            console.warn(`Firestore ${colName} listener notice:`, err);
+            recordFirestoreNotice(err, colName);
+          }
+        );
+        unsubscribers.push(unsub);
+      } catch (err) {
+        console.warn(`Firestore ${colName} setup error:`, err);
+      }
+    });
   });
 
   return () => {
