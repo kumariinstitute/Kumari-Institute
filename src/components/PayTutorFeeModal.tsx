@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   CreditCard,
@@ -103,6 +103,16 @@ export const PayTutorFeeModal: React.FC<PayTutorFeeModalProps> = ({
       setIsProcessing(false);
     }
   };
+
+  // Ensure bottom navigation bar is hidden while modal is open
+  useEffect(() => {
+    document.body.classList.add('modal-open');
+    window.dispatchEvent(new Event('modal-state-change'));
+    return () => {
+      document.body.classList.remove('modal-open');
+      window.dispatchEvent(new Event('modal-state-change'));
+    };
+  }, []);
 
   return (
     <div

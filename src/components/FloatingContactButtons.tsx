@@ -14,6 +14,44 @@ export const FloatingContactButtons: React.FC<FloatingContactButtonsProps> = ({
   defaultMessage = 'Hello Kumari Institute, I would like to enquire about Home Tutors and Courses in Rayagada.'
 }) => {
   const [hoveredBtn, setHoveredBtn] = useState<'whatsapp' | 'phone' | null>(null);
+  const [isModalActive, setIsModalActive] = useState(false);
+
+  // Hide floating action buttons if any popup/dialog is active
+  React.useEffect(() => {
+    const checkActiveModals = () => {
+      if (document.body.classList.contains('modal-open')) {
+        setIsModalActive(true);
+        return;
+      }
+      const modalElements = document.querySelectorAll(
+        '[role="dialog"], [aria-modal="true"], .modal-overlay, .modal-backdrop'
+      );
+      if (modalElements.length > 0) {
+        setIsModalActive(true);
+        return;
+      }
+      const fixedOverlays = Array.from(document.querySelectorAll('.fixed.inset-0')).filter((el) => {
+        if (el.closest('#mobile-bottom-navigation')) return false;
+        const style = window.getComputedStyle(el);
+        return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+      });
+      setIsModalActive(fixedOverlays.length > 0);
+    };
+
+    checkActiveModals();
+    const observer = new MutationObserver(() => checkActiveModals());
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+    window.addEventListener('modal-state-change', checkActiveModals);
+    window.addEventListener('resize', checkActiveModals);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('modal-state-change', checkActiveModals);
+      window.removeEventListener('resize', checkActiveModals);
+    };
+  }, []);
+
+  if (isModalActive) return null;
 
   const cleanPhone = phoneNumber.startsWith('+91')
     ? phoneNumber

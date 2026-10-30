@@ -29,6 +29,18 @@ export const TutorProfileModal: React.FC<TutorProfileModalProps> = ({
   onClose,
   onBookTutor
 }) => {
+  // Ensure bottom navigation bar is hidden while modal is open
+  React.useEffect(() => {
+    if (isOpen) {
+      document.body.classList.add('modal-open');
+      window.dispatchEvent(new Event('modal-state-change'));
+      return () => {
+        document.body.classList.remove('modal-open');
+        window.dispatchEvent(new Event('modal-state-change'));
+      };
+    }
+  }, [isOpen]);
+
   if (!isOpen || !tutor) return null;
 
   const tutorPhoto = tutor.avatar || (tutor as any).photoUrl || (tutor as any).image || '';

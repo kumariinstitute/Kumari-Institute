@@ -45,21 +45,44 @@ export const AdminReceiptVoucherModal: React.FC<AdminReceiptVoucherModalProps> =
     window.print();
   };
 
+  // Ensure bottom navigation bar is hidden while modal is open
+  React.useEffect(() => {
+    document.body.classList.add('modal-open');
+    window.dispatchEvent(new Event('modal-state-change'));
+    return () => {
+      document.body.classList.remove('modal-open');
+      window.dispatchEvent(new Event('modal-state-change'));
+    };
+  }, []);
+
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200"
+    >
       <div className="bg-slate-900 rounded-3xl max-w-xl w-full shadow-2xl border border-slate-700 overflow-hidden relative my-6 text-left flex flex-col">
         {/* Header Bar */}
-        <div className="bg-slate-950 p-4 border-b border-slate-800 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
+        <div className="bg-gradient-to-r from-[#0c2340] via-[#132e54] to-[#1e3a8a] text-white p-5 sm:p-6 border-b border-slate-700/80 relative shrink-0">
+          <div className="flex items-center gap-2 text-cyan-300 text-xs font-bold uppercase tracking-wider mb-1">
             <Receipt className="w-4 h-4 text-cyan-400" />
             <span>Audit Trail &amp; Reconciled Voucher</span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="pr-20">
+            <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+              Official Activity &amp; Payment Voucher
+            </h3>
+            <p className="text-xs sm:text-sm text-blue-100 mt-1">
+              Kumari Educational Coaching Institute • Official Recorded Record
+            </p>
+          </div>
+
+          <div className="absolute top-4 right-4 flex items-center gap-2">
             <button
               type="button"
               onClick={handlePrint}
-              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer text-xs flex items-center gap-1 font-semibold"
+              className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer text-xs flex items-center gap-1.5 font-bold ring-1 ring-white/20 shadow-xs"
               title="Print Voucher"
             >
               <Printer className="w-3.5 h-3.5" />
@@ -69,9 +92,10 @@ export const AdminReceiptVoucherModal: React.FC<AdminReceiptVoucherModalProps> =
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+              className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer ring-1 ring-white/20 shadow-xs"
+              aria-label="Close"
             >
-              <X className="w-4 h-4" />
+              <X className="w-5 h-5" />
             </button>
           </div>
         </div>

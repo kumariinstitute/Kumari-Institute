@@ -54,6 +54,12 @@ export interface Tutor {
   assignedStudents?: any[];
   educationDetails?: any;
   certificates?: any;
+  documents?: any;
+  tenthMarksheetUrl?: string;
+  twelfthMarksheetUrl?: string;
+  degreeCertificateUrl?: string;
+  photoUrl?: string;
+  profilePhotoUrl?: string;
   aadhaarDocUrl?: string;
   aadhaarNumber?: string;
   rejectionReason?: string;

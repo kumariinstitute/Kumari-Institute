@@ -677,12 +677,18 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
       return;
     }
 
-    if (file.size > 8 * 1024 * 1024) {
-      showToast('info', 'File size exceeds 8MB limit.');
-      return;
+    let localPreview = '';
+    try {
+      localPreview = await compressImageToBase64(file, 1400, 0.88);
+    } catch {
+      localPreview = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (ev) => resolve((ev.target?.result as string) || '');
+        reader.onerror = () => resolve('');
+        reader.readAsDataURL(file);
+      });
     }
 
-    const localPreview = URL.createObjectURL(file);
     const sizeStr =
       file.size > 1024 * 1024
         ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
@@ -705,20 +711,20 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
       if (result.success && result.url) {
         setter({
           name: file.name,
-          size: result.size,
+          size: result.size || sizeStr,
           type: file.type || 'image/jpeg',
-          dataUrl: localPreview,
+          dataUrl: result.url || localPreview,
           imgbbUrl: result.url,
           isUploading: false
         });
         showToast('success', `${sectionName} uploaded to ImgBB successfully!`);
       } else {
-        setter((prev) => (prev ? { ...prev, isUploading: false, imgbbUrl: result.url } : null));
+        setter((prev) => (prev ? { ...prev, isUploading: false, imgbbUrl: localPreview, dataUrl: localPreview } : null));
         showToast('info', `${sectionName} attached.`);
       }
     } catch (err: any) {
       console.warn(`[${sectionName} Upload] Notice:`, err);
-      setter((prev) => (prev ? { ...prev, isUploading: false } : null));
+      setter((prev) => (prev ? { ...prev, isUploading: false, dataUrl: localPreview, imgbbUrl: localPreview } : null));
     } finally {
       if (e.target) e.target.value = '';
     }
@@ -768,13 +774,17 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
     const cleanName = (fullName || currentUser?.name || '').trim();
     const cleanMobile = (mobileNumber || currentUser?.phone || '').trim();
 
+    // 1. Personal Information Validation
     if (!cleanName) {
-      showToast('info', 'Please enter your Full Name');
+      showToast('info', 'Please enter your Full Name in Section 1 (Personal Info).');
       return;
     }
-
-    if (!cleanMobile) {
-      showToast('info', 'Please enter your Mobile Number');
+    if (!dob) {
+      showToast('info', 'Please enter your Date of Birth in Section 1 (Personal Info).');
+      return;
+    }
+    if (!cleanMobile || cleanMobile.replace(/\D/g, '').length < 10) {
+      showToast('info', 'Please enter a valid 10-digit Mobile Number in Section 1.');
       return;
     }
 
@@ -784,24 +794,143 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
       return;
     }
 
-    // Photo fallback
-    const effectivePhoto = profilePhoto?.imgbbUrl || profilePhoto?.dataUrl || profilePhotoUrl || currentUser?.avatar || currentUser?.photoUrl || '/src/assets/images/tutor_priya_sharma_1789370534007.jpg';
+    // Profile Photo validation - Required!
+    const effectivePhoto = profilePhoto?.imgbbUrl || profilePhoto?.dataUrl || profilePhotoUrl || currentUser?.avatar || currentUser?.photoUrl;
+    if (!effectivePhoto) {
+      showToast('info', 'Please upload your Profile Photo in Section 1 (Personal Info).');
+      return;
+    }
 
-    // Marksheet and certificate fallbacks (do not block profile save)
-    const effectiveTenth = tenthImage?.imgbbUrl || tenthImage?.dataUrl || currentUser?.educationDetails?.tenth?.marksheetUrl || '';
-    const effectiveTwelfth = twelfthImage?.imgbbUrl || twelfthImage?.dataUrl || currentUser?.educationDetails?.twelfth?.marksheetUrl || '';
-    const effectiveAadhaar = aadhaarImage?.imgbbUrl || aadhaarImage?.dataUrl || (currentUser as any)?.aadhaarDocUrl || '';
+    if (!bio.trim()) {
+      showToast('info', 'Please enter your Brief Bio / Teaching Introduction in Section 1.');
+      return;
+    }
 
-    // Availability slots fallback
-    const effectiveSlots = availableTimeSlots.length > 0 ? availableTimeSlots : ['04:00 PM - 05:00 PM', '05:00 PM - 06:00 PM'];
+    // 2. Structured Address Validation - Required!
+    const cleanLine1 = addressLine1.trim();
+    const cleanStreet = addressStreet.trim();
+    const cleanLandmark = addressLandmark.trim();
+    const cleanCity = addressCity.trim();
+    const cleanState = addressState.trim();
+    const cleanPincode = addressPincode.trim();
 
-    // Address fallbacks
-    const cleanLine1 = addressLine1.trim() || 'House / Room';
-    const cleanStreet = addressStreet.trim() || 'Indira Nagar';
-    const cleanLandmark = addressLandmark.trim() || 'Rayagada';
-    const cleanCity = addressCity.trim() || 'Rayagada';
-    const cleanState = addressState.trim() || 'Odisha';
-    const cleanPincode = addressPincode.trim() || '765001';
+    if (!cleanLine1) {
+      showToast('info', 'Please enter Flat / House No. & Building in Section 2 (Address).');
+      return;
+    }
+    if (!cleanStreet) {
+      showToast('info', 'Please enter Street / Locality in Section 2 (Address).');
+      return;
+    }
+    if (!cleanLandmark) {
+      showToast('info', 'Please enter Landmark in Section 2 (Address).');
+      return;
+    }
+    if (!cleanCity) {
+      showToast('info', 'Please enter City in Section 2 (Address).');
+      return;
+    }
+    if (!cleanState) {
+      showToast('info', 'Please select State in Section 2 (Address).');
+      return;
+    }
+    if (!cleanPincode || cleanPincode.replace(/\D/g, '').length < 6) {
+      showToast('info', 'Please enter a valid 6-digit Pincode in Section 2 (Address).');
+      return;
+    }
+
+    // 3. Family Details Validation - Required!
+    if (!fatherName.trim()) {
+      showToast('info', "Please enter Father's Name in Section 3 (Family Details).");
+      return;
+    }
+    if (!fatherMobile.trim() || fatherMobile.replace(/\D/g, '').length < 10) {
+      showToast('info', "Please enter a valid 10-digit Mobile Number for Father in Section 3.");
+      return;
+    }
+    if (!motherName.trim()) {
+      showToast('info', "Please enter Mother's Name in Section 3 (Family Details).");
+      return;
+    }
+    if (!motherMobile.trim() || motherMobile.replace(/\D/g, '').length < 10) {
+      showToast('info', "Please enter a valid 10-digit Mobile Number for Mother in Section 3.");
+      return;
+    }
+
+    // 4. Education Details Validation - 10th & 12th are Mandatory with Marksheet Images! Degree is OPTIONAL!
+    if (!tenthSchool.trim()) {
+      showToast('info', 'Please enter 10th Standard School Name in Section 4 (Education).');
+      return;
+    }
+    if (!tenthBoard.trim()) {
+      showToast('info', 'Please select 10th Standard Board in Section 4.');
+      return;
+    }
+    if (!tenthYear.trim()) {
+      showToast('info', 'Please enter 10th Standard Passing Year in Section 4.');
+      return;
+    }
+    if (!tenthScore.trim()) {
+      showToast('info', 'Please enter 10th Standard Percentage / CGPA in Section 4.');
+      return;
+    }
+    const effectiveTenth = tenthImage?.imgbbUrl || tenthImage?.dataUrl || currentUser?.educationDetails?.tenth?.marksheetUrl;
+    if (!effectiveTenth) {
+      showToast('info', 'Please upload your 10th Marksheet / Certificate Image in Section 4.');
+      return;
+    }
+
+    if (!twelfthCollege.trim()) {
+      showToast('info', 'Please enter Plus Two (12th) College Name in Section 4 (Education).');
+      return;
+    }
+    if (!twelfthBoard.trim()) {
+      showToast('info', 'Please select 12th Standard Board in Section 4.');
+      return;
+    }
+    if (!twelfthYear.trim()) {
+      showToast('info', 'Please enter 12th Standard Passing Year in Section 4.');
+      return;
+    }
+    if (!twelfthScore.trim()) {
+      showToast('info', 'Please enter 12th Standard Percentage / CGPA in Section 4.');
+      return;
+    }
+    const effectiveTwelfth = twelfthImage?.imgbbUrl || twelfthImage?.dataUrl || currentUser?.educationDetails?.twelfth?.marksheetUrl;
+    if (!effectiveTwelfth) {
+      showToast('info', 'Please upload your 12th Marksheet / Certificate Image in Section 4.');
+      return;
+    }
+
+    // Note: Degree details (degreeCollege, degreeCourse, degreeYear, degreeScore, degreeImage) are strictly OPTIONAL!
+
+    // 5. Teaching Subjects, Classes & Time Slots - Required!
+    if (!selectedSubjects || selectedSubjects.length === 0) {
+      showToast('info', 'Please select at least 1 Teaching Subject in Section 5.');
+      return;
+    }
+    if (!selectedClasses || selectedClasses.length === 0) {
+      showToast('info', 'Please select at least 1 Class Handled in Section 5.');
+      return;
+    }
+    if (!availableTimeSlots || availableTimeSlots.length === 0) {
+      showToast('info', 'Please select at least 1 Available Time Slot in Section 5.');
+      return;
+    }
+
+    // 6. KYC Aadhaar Card Validation - Required!
+    const cleanAadhaar = aadhaarNumber.replace(/\D/g, '');
+    if (!cleanAadhaar || cleanAadhaar.length !== 12) {
+      showToast('info', 'Please enter a valid 12-digit Aadhaar Card Number in Section 6 (KYC).');
+      return;
+    }
+    const effectiveAadhaar = aadhaarImage?.imgbbUrl || aadhaarImage?.dataUrl || (currentUser as any)?.aadhaarDocUrl;
+    if (!effectiveAadhaar) {
+      showToast('info', 'Please upload your Government Aadhaar Card Document / Photo in Section 6.');
+      return;
+    }
+
+    const effectiveSlots = availableTimeSlots;
 
     setIsSubmitting(true);
     try {
@@ -946,19 +1075,60 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
         bio: bio.trim(),
         avatar: profilePhoto?.imgbbUrl || profilePhotoUrl || effectivePhoto,
         photoUrl: profilePhoto?.imgbbUrl || profilePhotoUrl || effectivePhoto,
+        profilePhotoUrl: profilePhoto?.imgbbUrl || profilePhotoUrl || effectivePhoto,
         subjects: selectedSubjects.length > 0 ? selectedSubjects : ['Mathematics', 'Science'],
         classesHandled: selectedClasses.length > 0 ? selectedClasses : ['1st - 6th Class'],
         aadhaarNumber: aadhaarNumber.trim(),
         aadhaarDocUrl: aadhaarImage?.imgbbUrl || aadhaarImage?.dataUrl || '',
+        aadhaarCardUrl: aadhaarImage?.imgbbUrl || aadhaarImage?.dataUrl || '',
+        tenthMarksheetUrl: tenthImage?.imgbbUrl || tenthImage?.dataUrl || '',
+        twelfthMarksheetUrl: twelfthImage?.imgbbUrl || twelfthImage?.dataUrl || '',
+        degreeCertificateUrl: degreeImage?.imgbbUrl || degreeImage?.dataUrl || '',
+        documents: {
+          profilePhoto: profilePhoto?.imgbbUrl || profilePhotoUrl || effectivePhoto,
+          tenthMarksheet: tenthImage?.imgbbUrl || tenthImage?.dataUrl || '',
+          twelfthMarksheet: twelfthImage?.imgbbUrl || twelfthImage?.dataUrl || '',
+          degreeCertificate: degreeImage?.imgbbUrl || degreeImage?.dataUrl || '',
+          aadhaarCard: aadhaarImage?.imgbbUrl || aadhaarImage?.dataUrl || ''
+        },
+        certificates: {
+          tenth: {
+            name: tenthImage?.name || '10th_marksheet.jpg',
+            url: tenthImage?.imgbbUrl || tenthImage?.dataUrl || '',
+            score: tenthScore,
+            year: tenthYear,
+            board: effectiveTenthBoard
+          },
+          twelfth: {
+            name: twelfthImage?.name || '12th_marksheet.jpg',
+            url: twelfthImage?.imgbbUrl || twelfthImage?.dataUrl || '',
+            score: twelfthScore,
+            year: twelfthYear,
+            board: effectiveTwelfthBoard
+          },
+          degree: {
+            name: degreeImage?.name || 'degree_certificate.jpg',
+            url: degreeImage?.imgbbUrl || degreeImage?.dataUrl || '',
+            score: degreeScore,
+            year: degreeYear,
+            course: effectiveDegreeCourse,
+            university: effectiveDegreeCollege
+          },
+          idProof: {
+            name: aadhaarImage?.name || 'aadhaar_card.jpg',
+            url: aadhaarImage?.imgbbUrl || aadhaarImage?.dataUrl || '',
+            docNumber: aadhaarNumber.trim(),
+            type: 'Aadhaar Card (Govt. of India)'
+          }
+        },
         profileCompleted: true,
-        // Second-time upload direct update: no re-verification needed!
-        kycStatus: isAlreadyCompleted || isTeacherApproved ? ('approved' as const) : ('submitted' as const),
-        verified: isAlreadyCompleted || isTeacherApproved,
-        status: isAlreadyCompleted || isTeacherApproved ? 'approved' : 'pending',
-        isApproved: isAlreadyCompleted || isTeacherApproved,
+        kycStatus: isTeacherApproved ? ('approved' as const) : ('submitted' as const),
+        verified: isTeacherApproved ? true : false,
+        status: isTeacherApproved ? 'approved' : 'pending',
+        isApproved: isTeacherApproved ? true : false,
         isBooked: Boolean((currentUser as any)?.isBooked),
         bookingStatus: (currentUser as any)?.bookingStatus || 'available',
-        verificationStatus: isAlreadyCompleted || isTeacherApproved ? 'Verified Genuine Tutor' : 'Pending Verification',
+        verificationStatus: isTeacherApproved ? 'Verified Genuine Tutor' : 'Pending Verification',
         updatedAt: new Date().toISOString()
       };
 
@@ -1006,11 +1176,11 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
         phone: mobileNumber.trim(),
         gender: gender as 'male' | 'female' | 'other',
         profileCompleted: true,
-        kycStatus: isAlreadyCompleted || isTeacherApproved ? ('approved' as const) : ('submitted' as const),
-        verified: isAlreadyCompleted || isTeacherApproved,
-        isApproved: isAlreadyCompleted || isTeacherApproved,
-        status: isAlreadyCompleted || isTeacherApproved ? 'approved' : 'pending',
-        verificationStatus: isAlreadyCompleted || isTeacherApproved ? 'Verified Genuine Tutor' : 'Pending Verification',
+        kycStatus: isTeacherApproved ? ('approved' as const) : ('submitted' as const),
+        verified: isTeacherApproved ? true : false,
+        isApproved: isTeacherApproved ? true : false,
+        status: isTeacherApproved ? 'approved' : 'pending',
+        verificationStatus: isTeacherApproved ? 'Verified Genuine Tutor' : 'Pending Verification',
         locality: compiledAddress,
         qualification: effectiveDegreeCourse || 'B.Sc',
         university: effectiveDegreeCollege,

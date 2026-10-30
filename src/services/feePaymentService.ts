@@ -55,6 +55,91 @@ export function formatINR(val: number | string): string {
 }
 
 /**
+ * Dynamically calculate the monthly tuition fee a tutor charges for a student based on:
+ * - Tutor's custom fee schedule by class & board (CBSE, ICSE, State Board)
+ * - Individual class rates (1st to 12th)
+ * - Number of students assigned
+ */
+export function calculateTutorFeeForStudent(
+  tutor: any,
+  studentGrade?: string,
+  studentBoard?: string
+): number {
+  if (!tutor) return 2000;
+
+  // 1. Determine Board
+  const rawBoard = (studentBoard || '').trim().toLowerCase();
+  let boardKey: 'CBSE' | 'ICSE' | 'State Board' = 'CBSE';
+  if (rawBoard.includes('icse') || rawBoard.includes('cisce') || rawBoard.includes('isc')) {
+    boardKey = 'ICSE';
+  } else if (
+    rawBoard.includes('state') ||
+    rawBoard.includes('bse') ||
+    rawBoard.includes('chse') ||
+    rawBoard.includes('odisha')
+  ) {
+    boardKey = 'State Board';
+  }
+
+  // 2. Determine Class Number (1 to 12)
+  const rawGrade = (studentGrade || '').trim().toLowerCase();
+  const numMatch = rawGrade.match(/\b([1-9]|1[0-2])\b/);
+  const classNum = numMatch ? parseInt(numMatch[1], 10) : 4;
+  const suffix =
+    classNum === 1
+      ? '1st'
+      : classNum === 2
+      ? '2nd'
+      : classNum === 3
+      ? '3rd'
+      : `${classNum}th`;
+
+  // 3. Check exact class-level fee schedule in tutor profile
+  const classFees = tutor.classFees || tutor.customFeeSchedule?.classWise;
+  if (classFees && classFees[boardKey] && classFees[boardKey][suffix]) {
+    const parsed = Number(classFees[boardKey][suffix]);
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+
+  // 4. Check board-specific subobject in customFeeSchedule
+  const bSubKey =
+    boardKey === 'ICSE' ? 'icse' : boardKey === 'State Board' ? 'stateBoard' : 'cbse';
+  const boardSchedule = tutor.customFeeSchedule?.[bSubKey];
+  if (boardSchedule && boardSchedule[suffix]) {
+    const parsed = Number(boardSchedule[suffix]);
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+
+  // 5. Check class tier in board schedule
+  if (boardSchedule) {
+    if (classNum <= 7 && Number(boardSchedule.class1to7) > 0) return Number(boardSchedule.class1to7);
+    if (classNum <= 10 && Number(boardSchedule.class8to10) > 0) return Number(boardSchedule.class8to10);
+    if (classNum >= 11 && Number(boardSchedule.class11to12) > 0) return Number(boardSchedule.class11to12);
+  }
+
+  // 6. Check global tier fields (feeClass1to7, feeClass8to10, feeClass11to12)
+  if (classNum <= 7) {
+    if (Number(tutor.feeClass1to7) > 0) return Number(tutor.feeClass1to7);
+    if (Number(tutor.feePrimary1to5) > 0) return Number(tutor.feePrimary1to5);
+  } else if (classNum <= 10) {
+    if (Number(tutor.feeClass8to10) > 0) return Number(tutor.feeClass8to10);
+    if (Number(tutor.feeSecondary9to10) > 0) return Number(tutor.feeSecondary9to10);
+  } else {
+    if (Number(tutor.feeClass11to12) > 0) return Number(tutor.feeClass11to12);
+    if (Number(tutor.feeSenior11to12) > 0) return Number(tutor.feeSenior11to12);
+  }
+
+  // 7. Fallback to monthlyFee or hourlyCharges * 30
+  const monthly = Number(tutor.monthlyFee);
+  if (!isNaN(monthly) && monthly > 0) return monthly;
+
+  const hourly = Number(tutor.hourlyCharges || tutor.hourlyRate || tutor.hourlyFee);
+  if (!isNaN(hourly) && hourly > 0) return hourly * 30;
+
+  return 2000;
+}
+
+/**
  * Check if a tutor payment is still active/paid or due for payment based on 28-day cycle
  */
 export function getTutorPaymentStatus(

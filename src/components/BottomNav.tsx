@@ -59,6 +59,59 @@ export const BottomNav: React.FC<BottomNavProps> = ({
     };
   }, [isExploreMenuOpen]);
 
+  // Detect if ANY popup/modal is currently active/open in the DOM, and hide this bottom nav bar
+  const [isModalActive, setIsModalActive] = useState(false);
+
+  useEffect(() => {
+    const checkActiveModals = () => {
+      // 1. Explicit body class check
+      if (document.body.classList.contains('modal-open')) {
+        setIsModalActive(true);
+        return;
+      }
+
+      // 2. Query any active modal, dialog, or overlay backdrop in the DOM
+      const modalElements = document.querySelectorAll(
+        '[role="dialog"], [aria-modal="true"], .modal-overlay, .modal-backdrop, #demo-booking-modal-overlay, #enquiry-modal-overlay, #program-detail-modal-overlay, #results-modal-overlay'
+      );
+      if (modalElements.length > 0) {
+        setIsModalActive(true);
+        return;
+      }
+
+      // 3. Query all full-screen fixed overlays that are not this bottom navigation
+      const fixedOverlays = Array.from(document.querySelectorAll('.fixed.inset-0')).filter((el) => {
+        if (el.closest('#mobile-bottom-navigation')) return false;
+        const style = window.getComputedStyle(el);
+        return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+      });
+
+      setIsModalActive(fixedOverlays.length > 0);
+    };
+
+    checkActiveModals();
+
+    const observer = new MutationObserver(() => {
+      checkActiveModals();
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'style', 'open']
+    });
+
+    window.addEventListener('modal-state-change', checkActiveModals);
+    window.addEventListener('resize', checkActiveModals);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('modal-state-change', checkActiveModals);
+      window.removeEventListener('resize', checkActiveModals);
+    };
+  }, []);
+
   const isHomeActive = activeTab === 'home';
   const isExploreActive = activeTab === 'about' || activeTab === 'success' || activeTab === 'gallery';
   const isTutorsActive = activeTab === 'tutors';
@@ -73,6 +126,11 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       onNavigateAuth('login', 'parent');
     }
   };
+
+  // If any popup is active, hide the bottom navigation bar completely so it never covers popup buttons/details
+  if (isModalActive) {
+    return null;
+  }
 
   return (
     <nav

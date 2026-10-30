@@ -177,8 +177,26 @@ export const AdminRecordPaymentModal: React.FC<AdminRecordPaymentModalProps> = (
     }
   };
 
+  // Ensure bottom navigation bar is hidden while modal is open
+  React.useEffect(() => {
+    if (isOpen) {
+      document.body.classList.add('modal-open');
+      window.dispatchEvent(new Event('modal-state-change'));
+      return () => {
+        document.body.classList.remove('modal-open');
+        window.dispatchEvent(new Event('modal-state-change'));
+      };
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200"
+    >
       <div className="bg-slate-900 rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-700 overflow-hidden relative my-6 text-left max-h-[92vh] flex flex-col">
         {/* Header */}
         <div className="bg-slate-950 p-6 border-b border-slate-800 flex items-center justify-between shrink-0">

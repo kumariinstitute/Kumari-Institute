@@ -240,7 +240,18 @@ export const FindTutorsPage: React.FC<FindTutorsPageProps> = ({
           const approved = data.filter((t) => {
             const id = (t.id || '').toLowerCase();
             const name = (t.name || '').toLowerCase().trim();
-            if (!name || name === 'educator' || name.includes('educator') || id.includes('educator')) return false;
+            if (
+              !name ||
+              name === 'educator' ||
+              name.includes('educator') ||
+              id.includes('educator') ||
+              id.includes('t7rcs2ym') ||
+              id.includes('divya-deep') ||
+              name === 'divya deep' ||
+              (t.email && (t.email.includes('rjanaki696') || t.email.includes('teacher.demo')))
+            ) {
+              return false;
+            }
             return (
               (t.verified === true && (t.isApproved === true || t.status === 'approved')) ||
               (t.isApproved === true && t.status === 'approved')
@@ -666,19 +677,22 @@ export const FindTutorsPage: React.FC<FindTutorsPageProps> = ({
         id.includes('sneha-patel') ||
         id.includes('sagar-das') ||
         id.includes('anita-mohanty') ||
-        id.includes('sukumar')
+        id.includes('sukumar') ||
+        id.includes('t7rcs2ym') ||
+        id.includes('divya-deep') ||
+        name === 'divya deep' ||
+        (t.email && (t.email.includes('rjanaki696') || t.email.includes('teacher.demo')))
       ) {
         return false;
       }
-      if (t.status === 'rejected' || t.verified === false) {
+      if (t.status === 'rejected' || t.status === 'pending' || t.verified === false) {
         return false;
       }
-      // Must be verified/approved by admin or present in complete_tutors
-      const isAccepted =
-        t.isApproved === true ||
-        t.status === 'approved' ||
-        t.verified === true ||
-        Boolean((t as any).profileCompleted);
+      // Must be verified and approved by admin
+      const isAccepted = Boolean(
+        t.verified === true &&
+        (t.isApproved === true || t.status === 'approved')
+      );
       return isAccepted;
     });
 

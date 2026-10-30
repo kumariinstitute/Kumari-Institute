@@ -10,15 +10,16 @@ try {
   // Ignore if already set
 }
 
-// Web app's Firebase configuration provided by the user
+// Your web app's Firebase configuration
+// Primary, main and one and only database for the website
 export const firebaseConfig = {
-  apiKey: "AIzaSyCyCjCJRX3L2XmUvGZuWOAFuYim7fW4Ru4",
-  authDomain: "kumari-institute-2a4ae.firebaseapp.com",
-  projectId: "kumari-institute-2a4ae",
-  storageBucket: "kumari-institute-2a4ae.firebasestorage.app",
-  messagingSenderId: "514105287551",
-  appId: "1:514105287551:web:9b975fb59f31acbd22f04a",
-  measurementId: "G-GMNHV6VY3J"
+  apiKey: "AIzaSyBKapNAJTeUYMdHGDe5hb6L4RTQ5u4ALQU",
+  authDomain: "kumari-2512d.firebaseapp.com",
+  projectId: "kumari-2512d",
+  storageBucket: "kumari-2512d.firebasestorage.app",
+  messagingSenderId: "899188453613",
+  appId: "1:899188453613:web:4ac3f26f40d545324d5ce4",
+  measurementId: "G-ZVQGYSMNH5"
 };
 
 // Initialize Firebase app singleton
@@ -27,38 +28,21 @@ export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfi
 // Initialize Firebase Authentication
 export const auth = getAuth(app);
 
-/**
- * Cloud Firestore Database Instance.
- * Connected to named database 'kumari-db' as configured in Google Cloud project.
- * Uses experimentalForceLongPolling and experimentalAutoDetectLongPolling
- * to reliably connect even in sandboxed web preview/iframe environments.
- */
-export const FIRESTORE_DATABASE_ID = "kumari-db";
-
+// Primary and only Cloud Firestore Database Instance
 let firestoreInstance: Firestore;
 try {
-  firestoreInstance = initializeFirestore(
-    app,
-    {
-      experimentalAutoDetectLongPolling: true,
-    },
-    FIRESTORE_DATABASE_ID
-  );
+  firestoreInstance = initializeFirestore(app, {
+    experimentalAutoDetectLongPolling: true,
+  });
 } catch {
-  firestoreInstance = getFirestore(app, FIRESTORE_DATABASE_ID);
+  firestoreInstance = getFirestore(app);
 }
 
+// One and only primary Firestore database
 export const db = firestoreInstance;
-
-// Also initialize default database instance '(default)' for dual-database resilience
-let defaultFirestoreInstance: Firestore;
-try {
-  defaultFirestoreInstance = getFirestore(app);
-} catch {
-  defaultFirestoreInstance = firestoreInstance;
-}
-export const defaultDb = defaultFirestoreInstance;
-export const allDbInstances = [db, defaultDb];
+export const defaultDb = db;
+export const allDbInstances = [db];
+export const FIRESTORE_DATABASE_ID = "(default)";
 
 // Real-time connection status state for UI feedback
 export interface FirestoreConnectionState {
@@ -70,16 +54,16 @@ export interface FirestoreConnectionState {
 }
 
 /**
- * Check real-time Firestore connectivity to database 'kumari-db'
+ * Check real-time Firestore connectivity to the primary database
  */
 export async function verifyFirestoreConnection(): Promise<FirestoreConnectionState> {
   try {
-    const probeRef = doc(db, "parents", "_probe_health");
+    const probeRef = doc(db, "_health_check", "_probe");
     await getDoc(probeRef);
 
     return {
       connected: true,
-      databaseId: FIRESTORE_DATABASE_ID,
+      databaseId: "(default)",
       projectId: firebaseConfig.projectId,
       lastChecked: new Date().toISOString()
     };
@@ -88,15 +72,13 @@ export async function verifyFirestoreConnection(): Promise<FirestoreConnectionSt
     const errMsg = err?.message || '';
     let friendlyError = '';
     if (errCode === 'permission-denied' || errMsg.includes('insufficient permissions')) {
-      friendlyError = 'Firebase Rules Blocking Read Access: Database rules in Firebase Console are rejecting client reads (permission-denied).';
-    } else if (errMsg.includes('NOT_FOUND') || errMsg.includes('does not exist')) {
-      friendlyError = `Database '${FIRESTORE_DATABASE_ID}' not found in project ${firebaseConfig.projectId}.`;
+      friendlyError = 'Firebase Rules: Please verify open read/write security rules in your Firebase Console for kumari-2512d.';
     } else {
-      friendlyError = errMsg || 'Unable to connect to Cloud Firestore.';
+      friendlyError = errMsg || 'Connecting to primary Cloud Firestore...';
     }
     return {
       connected: false,
-      databaseId: FIRESTORE_DATABASE_ID,
+      databaseId: "(default)",
       projectId: firebaseConfig.projectId,
       error: friendlyError,
       lastChecked: new Date().toISOString()

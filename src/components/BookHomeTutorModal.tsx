@@ -211,10 +211,24 @@ export const BookHomeTutorModal: React.FC<BookHomeTutorModalProps> = ({
     onClose();
   };
 
+  // Ensure bottom navigation bar is hidden while modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.classList.add('modal-open');
+      window.dispatchEvent(new Event('modal-state-change'));
+      return () => {
+        document.body.classList.remove('modal-open');
+        window.dispatchEvent(new Event('modal-state-change'));
+      };
+    }
+  }, [isOpen]);
+
   if (!isOpen || !tutor) return null;
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
       className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200"
       onClick={(e) => e.target === e.currentTarget && handleResetAndClose()}
     >

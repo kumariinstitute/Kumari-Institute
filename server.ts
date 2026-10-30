@@ -89,14 +89,55 @@ function isFakeParentRecord(u: any): boolean {
   }
 
   // Only exclude obvious dummy test placeholders
-  if (name === 'sample parent' || name === 'dummy parent' || name === 'test parent dummy') {
+  if (
+    name === 'sample parent' ||
+    name === 'dummy parent' ||
+    name === 'test parent dummy' ||
+    name === 'rahul kumar'
+  ) {
     return true;
   }
   const uid = String(u.uid || u.id || '').toLowerCase();
-  if (uid.includes('dummy_parent') || uid.includes('sample_mock') || uid.includes('demo_sample_dummy')) {
+  if (
+    uid.includes('dummy_parent') ||
+    uid.includes('sample_mock') ||
+    uid.includes('demo_sample_dummy') ||
+    uid.includes('z2xd4rrg') ||
+    email.includes('janakiram9471') ||
+    email.includes('parent.demo')
+  ) {
     return true;
   }
 
+  return false;
+}
+
+// Helper to exclude fake tutor profiles and prototypes
+function isFakeTeacherRecord(t: any): boolean {
+  if (!t) return true;
+  const id = String(t.id || t.uid || '').toLowerCase();
+  const name = String(t.name || t.fullName || '').toLowerCase().trim();
+  const email = String(t.email || '').toLowerCase().trim();
+
+  if (
+    !name ||
+    name === 'educator' ||
+    name.includes('educator') ||
+    id.includes('educator') ||
+    id.includes('t7rcs2ym') ||
+    id.includes('divya-deep') ||
+    id.includes('priya-sharma') ||
+    id.includes('rakesh-tripathy') ||
+    id.includes('sneha-patel') ||
+    id.includes('sagar-das') ||
+    id.includes('anita-mohanty') ||
+    id.includes('sukumar') ||
+    email.includes('rjanaki696') ||
+    email.includes('teacher.demo') ||
+    name === 'divya deep'
+  ) {
+    return true;
+  }
   return false;
 }
 
@@ -108,7 +149,7 @@ function loadSavedUsers(): Record<string, any> {
       const parsed = JSON.parse(content) || {};
       const clean: Record<string, any> = {};
       for (const [k, v] of Object.entries(parsed)) {
-        if (!isFakeParentRecord(v)) {
+        if (!isFakeParentRecord(v) && !isFakeTeacherRecord(v)) {
           clean[k] = v;
         }
       }
@@ -170,25 +211,7 @@ function loadSavedTeachers(): Tutor[] {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
         return parsed
-          .filter((t) => {
-            const id = (t.id || '').toLowerCase();
-            const name = (t.name || '').toLowerCase().trim();
-            if (
-              !name ||
-              name === 'educator' ||
-              name.includes('educator') ||
-              id.includes('educator')
-            ) {
-              return false;
-            }
-            return !(
-              id.includes('priya-sharma') ||
-              id.includes('rakesh-tripathy') ||
-              id.includes('sneha-patel') ||
-              id.includes('sagar-das') ||
-              id.includes('anita-mohanty')
-            );
-          })
+          .filter((t) => !isFakeTeacherRecord(t))
           .map((t) => enrichTeacherCertificates(t));
       }
     }
@@ -201,26 +224,11 @@ function loadSavedTeachers(): Tutor[] {
   const seenIds = new Set<string>();
   Object.values(usersDatabase).forEach((u: any) => {
     if (u && u.role === "teacher" && u.uid && !seenIds.has(u.uid)) {
-      const uidLower = u.uid.toLowerCase();
-      const rawName = (u.fullName || u.name || '').trim();
-      if (
-        !rawName ||
-        rawName.toLowerCase() === 'educator' ||
-        rawName.toLowerCase().includes('educator') ||
-        uidLower.includes('educator')
-      ) {
-        return;
-      }
-      if (
-        uidLower.includes('priya-sharma') ||
-        uidLower.includes('rakesh-tripathy') ||
-        uidLower.includes('sneha-patel') ||
-        uidLower.includes('sagar-das') ||
-        uidLower.includes('anita-mohanty')
-      ) {
+      if (isFakeTeacherRecord(u)) {
         return;
       }
       seenIds.add(u.uid);
+      const rawName = (u.fullName || u.name || '').trim();
       const tutor: Tutor = {
         id: u.uid,
         name: rawName,
@@ -455,8 +463,8 @@ let activityLogsDatabase: any[] = loadSavedActivityLogs();
 function recordActivityLog(logData: any) {
   const fullLog = {
     id: logData.id || `act-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    adminName: logData.adminName || "Admin Chandini Kurumoju",
-    adminEmail: logData.adminEmail || "chandinikurumoju424@gmail.com",
+    adminName: logData.adminName || "Kumari Institute Admin",
+    adminEmail: logData.adminEmail || "kkumariinstitute@gmail.com",
     adminAvatar: logData.adminAvatar || "/src/assets/images/student_rohit_1788779382685.jpg",
     actionType: logData.actionType,
     category: logData.category || "tutors",
@@ -543,25 +551,7 @@ app.get("/api/teachers", (req, res) => {
   const currentTeachers = loadSavedTeachers();
   // Strictly filter to genuine approved tutors only
   let filtered = currentTeachers.filter((t) => {
-    const id = (t.id || '').toLowerCase();
-    const name = (t.name || '').toLowerCase().trim();
-    if (
-      !name ||
-      name === 'educator' ||
-      name.includes('educator') ||
-      id.includes('educator')
-    ) {
-      return false;
-    }
-    if (
-      id.includes('priya-sharma') ||
-      id.includes('rakesh-tripathy') ||
-      id.includes('sneha-patel') ||
-      id.includes('sagar-das') ||
-      id.includes('anita-mohanty')
-    ) {
-      return false;
-    }
+    if (isFakeTeacherRecord(t)) return false;
     return (t.isApproved === true || t.status === "approved") && t.verified === true && t.status !== "rejected";
   });
 
@@ -587,16 +577,7 @@ app.get("/api/teachers", (req, res) => {
 // 2b. Admin Endpoint: Get All Teachers (Pending, Approved & Rejected with full certificates)
 app.get("/api/admin/teachers", (_req, res) => {
   const currentTeachers = loadSavedTeachers();
-  const realTeachers = currentTeachers.filter((t) => {
-    const id = (t.id || '').toLowerCase();
-    return !(
-      id.includes('priya-sharma') ||
-      id.includes('rakesh-tripathy') ||
-      id.includes('sneha-patel') ||
-      id.includes('sagar-das') ||
-      id.includes('anita-mohanty')
-    );
-  });
+  const realTeachers = currentTeachers.filter((t) => !isFakeTeacherRecord(t));
   res.json({
     success: true,
     total: realTeachers.length,
@@ -644,8 +625,8 @@ app.post("/api/admin/teachers/:id/verify", (req, res) => {
     }
 
     recordActivityLog({
-      adminName: req.body.adminName || "Admin Chandini Kurumoju",
-      adminEmail: req.body.adminEmail || "chandinikurumoju424@gmail.com",
+      adminName: req.body.adminName || "Kumari Institute Admin",
+      adminEmail: req.body.adminEmail || "kkumariinstitute@gmail.com",
       actionType: "tutor_rejected",
       category: "tutors",
       title: `Tutor ${teacherName} Verification Rejected`,
@@ -702,8 +683,8 @@ app.post("/api/admin/teachers/:id/verify", (req, res) => {
 
   // Record Admin Activity Log for auditability
   recordActivityLog({
-    adminName: req.body.adminName || "Admin Chandini Kurumoju",
-    adminEmail: req.body.adminEmail || "chandinikurumoju424@gmail.com",
+    adminName: req.body.adminName || "Kumari Institute Admin",
+    adminEmail: req.body.adminEmail || "kkumariinstitute@gmail.com",
     actionType: "tutor_approved",
     category: "tutors",
     title: `Tutor ${updatedTeacher.name} Approved Genuine`,
@@ -776,8 +757,8 @@ app.post("/api/admin/teachers/:id/reviews", (req, res) => {
   }
 
   recordActivityLog({
-    adminName: req.body.adminName || "Admin Chandini Kurumoju",
-    adminEmail: req.body.adminEmail || "chandinikurumoju424@gmail.com",
+    adminName: req.body.adminName || "Kumari Institute Admin",
+    adminEmail: req.body.adminEmail || "kkumariinstitute@gmail.com",
     actionType: "tutor_approved",
     category: "tutors",
     title: `New Verified Review Published for ${tutor.name}`,
@@ -1308,8 +1289,8 @@ app.post("/api/admin/bookings/:id/accept", (req, res) => {
 
   // Record Admin Activity Log
   recordActivityLog({
-    adminName: req.body.adminName || "Admin Chandini Kurumoju",
-    adminEmail: req.body.adminEmail || "chandinikurumoju424@gmail.com",
+    adminName: req.body.adminName || "Kumari Institute Admin",
+    adminEmail: req.body.adminEmail || "kkumariinstitute@gmail.com",
     actionType: isReassigned ? "booking_reassigned" : "booking_accepted",
     category: "bookings",
     title: isReassigned ? `Tutor Reassigned & Confirmed` : `Home Tutor Booking Accepted`,
@@ -1358,8 +1339,8 @@ app.post("/api/admin/bookings/:id/decline", (req, res) => {
 
   // Record Admin Activity Log
   recordActivityLog({
-    adminName: req.body.adminName || "Admin Chandini Kurumoju",
-    adminEmail: req.body.adminEmail || "chandinikurumoju424@gmail.com",
+    adminName: req.body.adminName || "Kumari Institute Admin",
+    adminEmail: req.body.adminEmail || "kkumariinstitute@gmail.com",
     actionType: "booking_declined",
     category: "bookings",
     title: `Home Tutor Booking Declined`,
@@ -1638,8 +1619,8 @@ app.post("/api/admin/activity-logs", (req, res) => {
   }
 
   const newLog = recordActivityLog({
-    adminName: adminName || "Admin Chandini Kurumoju",
-    adminEmail: adminEmail || "chandinikurumoju424@gmail.com",
+    adminName: adminName || "Kumari Institute Admin",
+    adminEmail: adminEmail || "kkumariinstitute@gmail.com",
     adminAvatar: adminAvatar || "/src/assets/images/student_rohit_1788779382685.jpg",
     actionType,
     category: category || (actionType.includes("payment_course") ? "payment_courses" : actionType.includes("payment") ? "payment_home_tutors" : "tutors"),

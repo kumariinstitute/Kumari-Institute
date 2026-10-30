@@ -57,8 +57,13 @@ function saveLocalWithdrawals(list: TutorWithdrawalRequest[]) {
   }
 }
 
+import { calculateTutorFeeForStudent } from './feePaymentService';
+
 /**
- * Calculates earnings breakdown: Pending Amount (within 30 days) and Current Available Balance (>= 30 days elapsed minus withdrawals)
+ * Calculates earnings breakdown:
+ * - Pending Amount (within 30 days of student assignment)
+ * - Withdrawal Amount / Current Available Balance (>= 30 days elapsed minus pending and approved withdrawals)
+ * Ensures requested withdrawal amount is immediately erased/deducted so tutor cannot claim multiple times.
  */
 export function calculateTutorEarnings(
   tutorRates: {
@@ -66,6 +71,11 @@ export function calculateTutorEarnings(
     hourlyRate?: number;
     hourlyFee?: number;
     monthlyFee?: number;
+    customFeeSchedule?: any;
+    classFees?: any;
+    feeClass1to7?: number;
+    feeClass8to10?: number;
+    feeClass11to12?: number;
   },
   assignedStudents: any[] = [],
   withdrawals: TutorWithdrawalRequest[] = []
@@ -76,8 +86,7 @@ export function calculateTutorEarnings(
     Number(tutorRates.hourlyFee) ||
     (tutorRates.monthlyFee ? Math.round(tutorRates.monthlyFee / 30) : 100);
 
-  const baseMonthlyPerStudent = tutorHourly * 30;
-  const defaultMonthlyPerStudent = Math.round(baseMonthlyPerStudent * 0.8);
+  const baseMonthlyPerStudent = tutorRates.monthlyFee || (tutorHourly * 30) || 2000;
 
   let totalMonthlyAccrued = 0;
   let pendingAmount = 0;
@@ -85,13 +94,20 @@ export function calculateTutorEarnings(
 
   const now = Date.now();
 
-  assignedStudents.forEach((student) => {
+  const studentsWithDetails = assignedStudents.map((student) => {
+    // Dynamically calculate fee as per tutor's class & board rates if not already saved
     const rawFee =
       Number(student.monthlyFee) ||
       Number(student.assignedTutorFee) ||
       Number(student.requestedTutorMonthlyFee) ||
+      calculateTutorFeeForStudent(
+        tutorRates,
+        student.grade || student.studentGrade,
+        student.board || student.studentBoard
+      ) ||
       baseMonthlyPerStudent;
-    const fee = Math.round(rawFee * 0.8);
+
+    const fee = rawFee;
     totalMonthlyAccrued += fee;
 
     // Check how many days have elapsed since booking / assignment
@@ -104,20 +120,30 @@ export function calculateTutorEarnings(
       }
     }
 
-    // Explicit override if student tuition is marked completed/settled or 28 days elapsed
+    // Exact 30-day maturation: pending for 30 days, then moves to withdrawal amount
     const isCompletedMonth =
       student.monthCompleted === true ||
       student.isMonthCompleted === true ||
-      daysElapsed >= 28;
+      daysElapsed >= 30;
+
+    const daysRemainingToMaturity = Math.max(0, 30 - daysElapsed);
 
     if (isCompletedMonth) {
       totalCurrentEarned += fee;
     } else {
       pendingAmount += fee;
     }
+
+    return {
+      ...student,
+      calculatedFee: fee,
+      daysElapsed,
+      daysRemainingToMaturity,
+      isMatured: isCompletedMonth
+    };
   });
 
-  // Calculate withdrawals
+  // Calculate withdrawals (both approved AND pending claim count against available balance!)
   let totalApprovedWithdrawn = 0;
   let totalPendingWithdrawn = 0;
 
@@ -129,6 +155,7 @@ export function calculateTutorEarnings(
     }
   });
 
+  // Deduct both approved and pending withdrawals so tutor cannot claim the same amount multiple times
   const currentAvailableBalance = Math.max(
     0,
     totalCurrentEarned - totalApprovedWithdrawn - totalPendingWithdrawn
@@ -136,14 +163,15 @@ export function calculateTutorEarnings(
 
   return {
     tutorHourly,
-    defaultMonthlyPerStudent,
+    defaultMonthlyPerStudent: baseMonthlyPerStudent,
     totalMonthlyAccrued,
     pendingAmount,
     totalCurrentEarned,
     totalApprovedWithdrawn,
     totalPendingWithdrawn,
     currentAvailableBalance,
-    studentCount: assignedStudents.length
+    studentCount: assignedStudents.length,
+    studentsWithDetails
   };
 }
 

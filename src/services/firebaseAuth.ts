@@ -29,6 +29,7 @@ import {
 import { auth, db, defaultDb, allDbInstances, FIRESTORE_DATABASE_ID, verifyFirestoreConnection } from "../lib/firebase";
 import { Tutor, TutorReview } from "../data/tutorsData";
 import { AdminSuccessStory, AdminActivityLog } from "../types";
+import { calculateTutorFeeForStudent } from "./feePaymentService";
 
 export interface ParentRegistrationData {
   email: string;
@@ -879,17 +880,18 @@ export async function updateTeacherProfileInFirestore(uid: string, profileData: 
     updatedAt: new Date().toISOString()
   });
 
-  // 1. Keep teachers collection updated across all databases
+  // 1. Keep 'tutors' and 'teachers' collections updated across all databases
   for (const dbInst of allDbInstances) {
     try {
+      await setDoc(doc(dbInst, "tutors", uid), completePayload, { merge: true });
       await setDoc(doc(dbInst, "teachers", uid), completePayload, { merge: true });
     } catch (err) {
-      console.warn('teachers collection write notice:', err);
+      console.warn('tutors/teachers collection write notice:', err);
     }
   }
 
   // 2. If first time (not approved), store in tutors_requests for admin review.
-  // If already approved or second update, directly update complete_tutors and remove from tutors_requests!
+  // If already approved, directly update complete_tutors and keep tutors updated dynamically!
   if (!isAlreadyApproved) {
     for (const dbInst of allDbInstances) {
       try {
@@ -1534,8 +1536,8 @@ export async function enrollUserInCourse(
   // Automatically log Course Payment (Way 2: Course)
   const numericFee = parseInt((course.fee || '').replace(/[^0-9]/g, '')) || 2500;
   logAdminActivity({
-    adminName: "Admin Sunita Sahoo",
-    adminEmail: "sunita.sahoo.admin@kumari.edu.in",
+    adminName: "Kumari Institute Admin",
+    adminEmail: "kkumariinstitute@gmail.com",
     actionType: "payment_course",
     category: "payment_courses",
     title: `Course Enrollment Payment Received (Way 2: Course)`,
@@ -2243,7 +2245,7 @@ export function subscribeToRealtimeTeachers(onTeachersUpdate: (teachers: Tutor[]
     .catch(() => {});
 
   const unsubscribers: (() => void)[] = [];
-  const tutorCollections = ['complete_tutors', 'confirm_tutors_details', 'confirm_tutors', 'teachers'];
+  const tutorCollections = ['tutors', 'complete_tutors', 'confirm_tutors_details', 'confirm_tutors', 'teachers'];
 
   allDbInstances.forEach((dbInst) => {
     tutorCollections.forEach((colName) => {
@@ -2258,18 +2260,18 @@ export function subscribeToRealtimeTeachers(onTeachersUpdate: (teachers: Tutor[]
 
               const docId = docSnap.id;
               const rawName = (data.fullName || data.name || '').trim();
-              if (!rawName || rawName.toLowerCase() === 'educator') return;
+              if (!rawName || rawName.toLowerCase() === 'educator' || isFakeTutor(data) || isFakeTutor({ id: docId, ...data })) return;
 
-              // Any tutor in complete_tutors or confirm_tutors_details is an approved tutor!
+              // Any tutor in complete_tutors or confirm_tutors_details or with verified true is approved
               const isConfirmedCollection = colName === 'complete_tutors' || colName === 'confirm_tutors_details' || colName === 'confirm_tutors';
               const isApproved = Boolean(
                 isConfirmedCollection ||
+                (data.verified === true && (data.isApproved === true || data.status === 'approved')) ||
                 data.isApproved === true ||
-                data.status === 'approved' ||
-                data.verified === true
+                data.status === 'approved'
               );
 
-              if (!isApproved || data.status === 'rejected') return;
+              if (!isApproved || data.status === 'rejected' || data.verified === false) return;
 
               const monthlyFee = ((typeof data.hourlyRate === 'number' && data.hourlyRate > 0) || (typeof data.hourlyCharges === 'number' && data.hourlyCharges > 0) || (typeof data.hourlyFee === 'number' && data.hourlyFee > 0))
                 ? ((typeof data.hourlyRate === 'number' && data.hourlyRate > 0 ? data.hourlyRate : (typeof data.hourlyCharges === 'number' && data.hourlyCharges > 0 ? data.hourlyCharges : (data.hourlyFee || 100))) * 30)
@@ -2453,24 +2455,112 @@ export function subscribeToAllTeachersForAdmin(onTeachersUpdate: (teachers: Tuto
       feeClass8to10: data.feeClass8to10,
       feeClass11to12: data.feeClass11to12,
       createdAt: data.createdAt || data.submittedAt || '',
+      tenthMarksheetUrl:
+        data.educationDetails?.tenth?.marksheetUrl ||
+        data.tenthMarksheetUrl ||
+        data.documents?.tenthMarksheet ||
+        data.certificates?.tenth?.url ||
+        data.tenthImage?.imgbbUrl ||
+        data.tenthImage?.dataUrl ||
+        '',
+      twelfthMarksheetUrl:
+        data.educationDetails?.twelfth?.marksheetUrl ||
+        data.twelfthMarksheetUrl ||
+        data.documents?.twelfthMarksheet ||
+        data.certificates?.twelfth?.url ||
+        data.twelfthImage?.imgbbUrl ||
+        data.twelfthImage?.dataUrl ||
+        '',
+      degreeCertificateUrl:
+        data.educationDetails?.degree?.marksheetUrl ||
+        data.degreeCertificateUrl ||
+        data.documents?.degreeCertificate ||
+        data.certificates?.degree?.url ||
+        data.degreeImage?.imgbbUrl ||
+        data.degreeImage?.dataUrl ||
+        '',
+      aadhaarDocUrl:
+        data.aadhaarDocUrl ||
+        data.aadhaarCardUrl ||
+        data.documents?.aadhaarCard ||
+        data.certificates?.idProof?.url ||
+        data.aadhaarImage?.imgbbUrl ||
+        data.aadhaarImage?.dataUrl ||
+        '',
+      documents: {
+        profilePhoto: data.avatar || data.photoUrl || data.profilePhotoUrl || data.documents?.profilePhoto || '',
+        tenthMarksheet:
+          data.educationDetails?.tenth?.marksheetUrl ||
+          data.tenthMarksheetUrl ||
+          data.documents?.tenthMarksheet ||
+          data.certificates?.tenth?.url ||
+          data.tenthImage?.imgbbUrl ||
+          data.tenthImage?.dataUrl ||
+          '',
+        twelfthMarksheet:
+          data.educationDetails?.twelfth?.marksheetUrl ||
+          data.twelfthMarksheetUrl ||
+          data.documents?.twelfthMarksheet ||
+          data.certificates?.twelfth?.url ||
+          data.twelfthImage?.imgbbUrl ||
+          data.twelfthImage?.dataUrl ||
+          '',
+        degreeCertificate:
+          data.educationDetails?.degree?.marksheetUrl ||
+          data.degreeCertificateUrl ||
+          data.documents?.degreeCertificate ||
+          data.certificates?.degree?.url ||
+          data.degreeImage?.imgbbUrl ||
+          data.degreeImage?.dataUrl ||
+          '',
+        aadhaarCard:
+          data.aadhaarDocUrl ||
+          data.aadhaarCardUrl ||
+          data.documents?.aadhaarCard ||
+          data.certificates?.idProof?.url ||
+          data.aadhaarImage?.imgbbUrl ||
+          data.aadhaarImage?.dataUrl ||
+          ''
+      },
       certificates: {
         tenth: {
           name: data.educationDetails?.tenth?.marksheetName || '10th_marksheet.jpg',
-          url: data.educationDetails?.tenth?.marksheetUrl || data.tenthMarksheetUrl || data.tenthImage?.imgbbUrl || data.tenthImage?.dataUrl || '',
+          url:
+            data.educationDetails?.tenth?.marksheetUrl ||
+            data.tenthMarksheetUrl ||
+            data.documents?.tenthMarksheet ||
+            data.certificates?.tenth?.url ||
+            data.tenthImage?.imgbbUrl ||
+            data.tenthImage?.dataUrl ||
+            '',
           score: data.educationDetails?.tenth?.score || '',
           year: data.educationDetails?.tenth?.year || '',
           board: data.educationDetails?.tenth?.board || 'Board of Secondary Education, Odisha'
         },
         twelfth: {
           name: data.educationDetails?.twelfth?.marksheetName || '12th_marksheet.jpg',
-          url: data.educationDetails?.twelfth?.marksheetUrl || data.twelfthMarksheetUrl || data.twelfthImage?.imgbbUrl || data.twelfthImage?.dataUrl || '',
+          url:
+            data.educationDetails?.twelfth?.marksheetUrl ||
+            data.twelfthMarksheetUrl ||
+            data.documents?.twelfthMarksheet ||
+            data.certificates?.twelfth?.url ||
+            data.twelfthImage?.imgbbUrl ||
+            data.twelfthImage?.dataUrl ||
+            '',
           score: data.educationDetails?.twelfth?.score || '',
           year: data.educationDetails?.twelfth?.year || '',
           board: data.educationDetails?.twelfth?.board || 'Council of Higher Secondary Education, Odisha'
         },
         degree: {
           name: data.educationDetails?.degree?.marksheetName || 'degree_certificate.jpg',
-          url: data.educationDetails?.degree?.marksheetUrl || data.degreeCertificateUrl || data.degreeImage?.imgbbUrl || data.degreeImage?.dataUrl || '',
+          url:
+            data.educationDetails?.degree?.marksheetUrl ||
+            data.degreeCertificateUrl ||
+            data.documents?.degreeCertificate ||
+            data.certificates?.degree?.url ||
+            data.degreeImage?.imgbbUrl ||
+            data.degreeImage?.dataUrl ||
+            '',
           score: data.educationDetails?.degree?.score || '',
           year: data.educationDetails?.degree?.year || '',
           course: data.educationDetails?.degree?.course || data.qualification || '',
@@ -2478,13 +2568,19 @@ export function subscribeToAllTeachersForAdmin(onTeachersUpdate: (teachers: Tuto
         },
         idProof: {
           name: 'aadhaar_card.jpg',
-          url: data.aadhaarDocUrl || data.aadhaarImage?.imgbbUrl || data.aadhaarImage?.dataUrl || data.certificates?.idProof?.url || '',
+          url:
+            data.aadhaarDocUrl ||
+            data.aadhaarCardUrl ||
+            data.documents?.aadhaarCard ||
+            data.certificates?.idProof?.url ||
+            data.aadhaarImage?.imgbbUrl ||
+            data.aadhaarImage?.dataUrl ||
+            '',
           docNumber: data.aadhaarNumber || '',
           type: 'Aadhaar Card (Govt. of India)'
         }
       },
       aadhaarNumber: data.aadhaarNumber,
-      aadhaarDocUrl: data.aadhaarDocUrl || data.aadhaarImage?.imgbbUrl || data.aadhaarImage?.dataUrl || '',
       availableTimeSlots: Array.isArray(data.availableTimeSlots) ? data.availableTimeSlots : [],
       reviews: Array.isArray(data.reviews) ? data.reviews : []
     };
@@ -2507,7 +2603,7 @@ export function subscribeToAllTeachersForAdmin(onTeachersUpdate: (teachers: Tuto
     .then((res) => {
       if (res?.success && Array.isArray(res.teachers)) {
         res.teachers.forEach((t: any) => {
-          if (t && t.id) {
+          if (t && t.id && !isFakeTutor(t)) {
             const isCompleted = Boolean(
               t.profileCompleted === true ||
               t.isApproved === true ||
@@ -2533,7 +2629,7 @@ export function subscribeToAllTeachersForAdmin(onTeachersUpdate: (teachers: Tuto
     snapshot.forEach((docSnap: any) => {
       const data = docSnap.data();
       const rawName = (data?.fullName || data?.name || '').trim();
-      if (!rawName) return;
+      if (!rawName || isFakeTutor(data) || isFakeTutor({ id: docSnap.id, ...data })) return;
 
       const isCompletedProfile = Boolean(
         defaultRoleCompleted ||
@@ -2634,15 +2730,51 @@ export function isFakeParent(data: any): boolean {
   const email = String(data.email || '').toLowerCase().trim();
   const phone = String(data.phone || data.mobile || '').trim();
 
-  if (id.includes('dummy_parent') || id.includes('sample_mock') || id.includes('fake_placeholder_mock')) {
-    return true;
-  }
-  if (name === 'sample parent' || name === 'dummy parent' || name === 'test parent dummy') {
+  if (
+    id.includes('dummy_parent') ||
+    id.includes('sample_mock') ||
+    id.includes('fake_placeholder_mock') ||
+    id.includes('z2xd4rrg') ||
+    email.includes('janakiram9471') ||
+    email.includes('parent.demo') ||
+    name === 'rahul kumar' ||
+    name === 'sample parent' ||
+    name === 'dummy parent' ||
+    name === 'test parent dummy'
+  ) {
     return true;
   }
 
   // Genuine parent has at least one identifier
   if (!name && !email && !phone && !data.childName && !data.studentName) {
+    return true;
+  }
+  return false;
+}
+
+export function isFakeTutor(data: any): boolean {
+  if (!data) return true;
+  const id = String(data.uid || data.id || '').toLowerCase();
+  const name = String(data.fullName || data.name || '').toLowerCase().trim();
+  const email = String(data.email || '').toLowerCase().trim();
+
+  if (
+    !name ||
+    name === 'educator' ||
+    name.includes('educator') ||
+    id.includes('educator') ||
+    id.includes('t7rcs2ym') ||
+    id.includes('divya-deep') ||
+    id.includes('priya-sharma') ||
+    id.includes('rakesh-tripathy') ||
+    id.includes('sneha-patel') ||
+    id.includes('sagar-das') ||
+    id.includes('anita-mohanty') ||
+    id.includes('sukumar') ||
+    email.includes('rjanaki696') ||
+    email.includes('teacher.demo') ||
+    name === 'divya deep'
+  ) {
     return true;
   }
   return false;
@@ -2780,7 +2912,7 @@ export function subscribeToAllParentsForAdmin(onParentsUpdate: (parents: AppUser
       console.warn("Server admin parents fetch notice:", err);
     });
 
-  // 2. Subscribe in real-time to Firestore parent collections across all database instances (kumari-db and default)
+  // 2. Subscribe in real-time to Firestore parent collections on the primary database
   const unsubscribers: (() => void)[] = [];
   const parentCollections = ['parents', 'parent', 'registered_parents', 'users', 'parent_requests', 'parents_requests'];
 
@@ -2855,31 +2987,8 @@ export async function adminDirectAssignTutorToParent(
 ): Promise<{ success: boolean; message: string; bookingId?: string }> {
   try {
     const studentGrade = parent.childGrade || tutor.classesHandled[0] || '1st Class';
-    const board = (parent.childBoard as any) || 'CBSE';
-    const bKey = board === 'ICSE' ? 'icse' : 'cbse';
-    const tutorCustom = tutor?.customFeeSchedule;
-
-    // Calculate exact fee for the new tutor based on grade & board
-    const match = studentGrade.match(/(\d+)/);
-    const classNum = match ? parseInt(match[1], 10) : 1;
-    let targetFee = Number(tutor.monthlyFee) || 3000;
-
-    if (classNum <= 7) {
-      targetFee =
-        Number(tutorCustom?.[bKey]?.class1to7) ||
-        (board === 'CBSE' ? Number(tutor.feeClass1to7) : Math.round((Number(tutor.feeClass1to7) || 1500) * 1.15)) ||
-        targetFee;
-    } else if (classNum <= 10) {
-      const perSub =
-        Number(tutorCustom?.[bKey]?.class8to10) ||
-        (board === 'CBSE' ? Number(tutor.feeClass8to10) : 2000);
-      targetFee = perSub * Math.max(1, tutor.subjects?.length || 1);
-    } else {
-      const perSub =
-        Number(tutorCustom?.[bKey]?.class11to12) ||
-        (board === 'CBSE' ? Number(tutor.feeClass11to12) : 3000);
-      targetFee = perSub * Math.max(1, tutor.subjects?.length || 1);
-    }
+    const board = (parent.childBoard as any) || (parent as any).board || 'CBSE';
+    const targetFee = calculateTutorFeeForStudent(tutor, studentGrade, board);
 
     // If changing from an existing tutor, release old tutor's assignment
     const oldTutorId =
@@ -3021,11 +3130,13 @@ export async function adminVerifyTutorInDatabase(
 
       await setDoc(tutorRef, approvalUpdates, { merge: true }).catch((err) => console.warn('Firestore tutor verify notice:', err));
       
-      // Save full profile to complete_tutors so Tutors Directory has complete data
+      // Save full profile to tutors and complete_tutors so Tutors Directory and collection has complete verified data
       for (const dbInst of allDbInstances) {
-        await setDoc(doc(dbInst, "complete_tutors", tutorId), { ...existingData, ...approvalUpdates, id: tutorId, uid: rawUid || tutorId }, { merge: true }).catch(() => {});
+        await setDoc(doc(dbInst, "tutors", tutorId), { ...existingData, ...approvalUpdates, id: tutorId, uid: rawUid || tutorId, verified: true, isApproved: true, status: 'approved' }, { merge: true }).catch(() => {});
+        await setDoc(doc(dbInst, "complete_tutors", tutorId), { ...existingData, ...approvalUpdates, id: tutorId, uid: rawUid || tutorId, verified: true, isApproved: true, status: 'approved' }, { merge: true }).catch(() => {});
         if (rawUid && rawUid !== tutorId) {
-          await setDoc(doc(dbInst, "complete_tutors", rawUid), { ...existingData, ...approvalUpdates, id: rawUid, uid: rawUid }, { merge: true }).catch(() => {});
+          await setDoc(doc(dbInst, "tutors", rawUid), { ...existingData, ...approvalUpdates, id: rawUid, uid: rawUid, verified: true, isApproved: true, status: 'approved' }, { merge: true }).catch(() => {});
+          await setDoc(doc(dbInst, "complete_tutors", rawUid), { ...existingData, ...approvalUpdates, id: rawUid, uid: rawUid, verified: true, isApproved: true, status: 'approved' }, { merge: true }).catch(() => {});
         }
 
         // Once tutor request is accepted by admin, remove them completely from tutors_requests collections
@@ -3105,6 +3216,8 @@ export async function adminVerifyTutorInDatabase(
       };
 
       await setDoc(tutorRef, rejectUpdates, { merge: true }).catch((err) => console.warn('Firestore tutor reject notice:', err));
+      await setDoc(doc(db, "tutors", tutorId), rejectUpdates, { merge: true }).catch(() => {});
+      if (rawUid) await setDoc(doc(db, "tutors", rawUid), rejectUpdates, { merge: true }).catch(() => {});
       await deleteDoc(doc(db, "complete_tutors", tutorId)).catch(() => {});
       if (rawUid) await deleteDoc(doc(db, "complete_tutors", rawUid)).catch(() => {});
 
@@ -3515,15 +3628,15 @@ export async function adminAcceptAndAssignTutorBooking(
         if (tSnap.exists()) {
           const tData = tSnap.data();
           targetTutorName = tData.name || targetTutorName;
-          const tHourly =
-            Number(tData.hourlyRate) ||
-            Number(tData.hourlyCharges) ||
-            Number(tData.hourlyFee) ||
-            (tData.monthlyFee ? Math.round(tData.monthlyFee / 30) : 100);
-          targetTutorFee = tHourly > 0 ? tHourly * 30 : (tData.monthlyFee || targetTutorFee);
           targetTutorPhone = tData.phone || targetTutorPhone;
           targetTutorAvatar = tData.avatar || targetTutorAvatar;
           targetTutorSubjects = tData.subjects || targetTutorSubjects;
+          const calculatedFee = calculateTutorFeeForStudent(
+            tData,
+            booking?.studentGrade,
+            booking?.studentBoard || booking?.board
+          );
+          targetTutorFee = calculatedFee > 0 ? calculatedFee : (Number(tData.monthlyFee) || targetTutorFee);
         }
       } catch (e) {
         console.warn('Tutor read notice:', e);
@@ -3538,6 +3651,9 @@ export async function adminAcceptAndAssignTutorBooking(
       console.warn('incoming_bookings delete notice:', delErr);
     }
 
+    const nowIso = new Date().toISOString();
+    const demoEndsAtIso = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+
     // Also update Firestore doc in legacy 'tutor_bookings'
     const bookingRef = doc(db, "tutor_bookings", bookingId);
     await updateDoc(bookingRef, {
@@ -3547,8 +3663,9 @@ export async function adminAcceptAndAssignTutorBooking(
       assignedTutorFee: targetTutorFee,
       assignedTutorPhone: targetTutorPhone,
       assignedTutorAvatar: targetTutorAvatar,
-      assignedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      assignedAt: nowIso,
+      demoEndsAt: demoEndsAtIso,
+      updatedAt: nowIso,
       reassignedNotes: notes || 'Confirmed & Assigned by Admin'
     }).catch((err) => console.warn('Firestore booking accept notice:', err));
 
@@ -3570,7 +3687,8 @@ export async function adminAcceptAndAssignTutorBooking(
         subjects: booking?.subjects || targetTutorSubjects,
         timing: booking?.preferredTimeSlot || '5:00 PM - 6:00 PM',
         monthlyFee: targetTutorFee,
-        assignedAt: booking?.assignedAt || new Date().toISOString(),
+        assignedAt: booking?.assignedAt || nowIso,
+        demoEndsAt: demoEndsAtIso,
         status: 'Active'
       };
 
@@ -3615,7 +3733,7 @@ export async function adminAcceptAndAssignTutorBooking(
         bookedByParentPhone: booking?.parentPhone || '',
         assignedStudents: filteredStudents,
         bookedTimeSlots: arrayUnion(studentObj.timing),
-        updatedAt: new Date().toISOString()
+        updatedAt: nowIso
       }).catch((err) => console.warn('Firestore tutor booking status update notice:', err));
 
       // Also update complete_tutors collection in Firestore
@@ -3627,24 +3745,25 @@ export async function adminAcceptAndAssignTutorBooking(
             parentName: booking?.parentName || 'Parent',
             parentPhone: booking?.parentPhone || '',
             studentName: booking?.studentName || '',
-            assignedAt: new Date().toISOString()
+            assignedAt: nowIso
           }),
           assignedStudents: filteredStudents,
           feeAmount: targetTutorFee,
-          updatedAt: new Date().toISOString()
+          updatedAt: nowIso
         }, { merge: true });
       } catch (ctErr) {
         console.warn('complete_tutors booking update notice:', ctErr);
       }
     }
 
-    // 3. Update parent doc in Firestore 'parents' collection (no users collection)
+    // 3. Update parent doc in Firestore 'parents' collection (cleanly replacing old tutor with newly assigned tutor)
     const parentDocKey = booking?.parentUid || (booking?.parentPhone ? `parent_${booking.parentPhone.replace(/\D/g, '')}` : null);
     const hiredObj = {
-      id: `hired-${Date.now()}`,
+      id: bookingId,
       bookingId: bookingId,
       tutorId: targetTutorId,
       tutorName: targetTutorName,
+      assignedTutorName: targetTutorName,
       subjects: targetTutorSubjects,
       monthlyFee: targetTutorFee,
       fee: targetTutorFee,
@@ -3653,8 +3772,9 @@ export async function adminAcceptAndAssignTutorBooking(
       studentName: booking?.studentName || '',
       studentGrade: booking?.studentGrade || '',
       timeSlot: booking?.preferredTimeSlot || '',
-      assignedAt: new Date().toISOString(),
-      status: 'Active'
+      assignedAt: nowIso,
+      demoEndsAt: demoEndsAtIso,
+      status: 'accepted'
     };
 
     const courseString = booking?.studentGrade
@@ -3664,6 +3784,27 @@ export async function adminAcceptAndAssignTutorBooking(
     if (parentDocKey) {
       try {
         const parentDocRef = doc(db, "parents", parentDocKey);
+        let existingBooked: any[] = [];
+        let existingHired: any[] = [];
+        try {
+          const pSnap = await getDoc(parentDocRef);
+          if (pSnap.exists()) {
+            const pData = pSnap.data();
+            existingBooked = Array.isArray(pData.bookedTutors) ? pData.bookedTutors : [];
+            existingHired = Array.isArray(pData.hiredTutors) ? pData.hiredTutors : [];
+          }
+        } catch {}
+
+        // Replace any matching booking record so updated tutor reflects cleanly without stale duplicates
+        const updatedBooked = [
+          hiredObj,
+          ...existingBooked.filter((b: any) => b.bookingId !== bookingId && b.id !== bookingId)
+        ];
+        const updatedHired = [
+          hiredObj,
+          ...existingHired.filter((h: any) => h.bookingId !== bookingId && h.id !== bookingId)
+        ];
+
         await setDoc(parentDocRef, {
           uid: parentDocKey,
           fullName: booking?.parentName || 'Registered Parent',
@@ -3673,14 +3814,15 @@ export async function adminAcceptAndAssignTutorBooking(
           childName: booking?.studentName || '',
           childGrade: booking?.studentGrade || '',
           role: 'parent',
-          bookedTutors: arrayUnion(hiredObj),
-          hiredTutors: arrayUnion(hiredObj),
+          bookedTutors: updatedBooked,
+          hiredTutors: updatedHired,
           course: courseString,
           feesAmount: targetTutorFee,
           assignedTutor: targetTutorName,
           assignedTutorId: targetTutorId,
           assignedTutorPhone: targetTutorPhone,
-          assignedAt: new Date().toISOString(),
+          assignedAt: nowIso,
+          demoEndsAt: demoEndsAtIso,
           assignedEducator: {
             id: targetTutorId,
             name: targetTutorName,
@@ -3689,9 +3831,11 @@ export async function adminAcceptAndAssignTutorBooking(
             phone: targetTutorPhone,
             monthlyFee: targetTutorFee,
             avatar: targetTutorAvatar,
+            assignedAt: nowIso,
+            demoEndsAt: demoEndsAtIso,
             status: 'Active'
           },
-          updatedAt: new Date().toISOString()
+          updatedAt: nowIso
         }, { merge: true });
       } catch (pErr) {
         console.warn('parents collection booking accept notice:', pErr);
@@ -3704,15 +3848,23 @@ export async function adminAcceptAndAssignTutorBooking(
         const qSnap = await getDocs(qEmail);
         for (const docSnap of qSnap.docs) {
           if (docSnap.id !== parentDocKey) {
+            let pBooked: any[] = [];
+            let pHired: any[] = [];
+            try {
+              const d = docSnap.data();
+              pBooked = Array.isArray(d.bookedTutors) ? d.bookedTutors : [];
+              pHired = Array.isArray(d.hiredTutors) ? d.hiredTutors : [];
+            } catch {}
             await setDoc(docSnap.ref, {
-              bookedTutors: arrayUnion(hiredObj),
-              hiredTutors: arrayUnion(hiredObj),
+              bookedTutors: [hiredObj, ...pBooked.filter((b: any) => b.bookingId !== bookingId && b.id !== bookingId)],
+              hiredTutors: [hiredObj, ...pHired.filter((h: any) => h.bookingId !== bookingId && h.id !== bookingId)],
               course: courseString,
               feesAmount: targetTutorFee,
               assignedTutor: targetTutorName,
               assignedTutorId: targetTutorId,
               assignedTutorPhone: targetTutorPhone,
-              assignedAt: new Date().toISOString(),
+              assignedAt: nowIso,
+              demoEndsAt: demoEndsAtIso,
               assignedEducator: {
                 id: targetTutorId,
                 name: targetTutorName,
@@ -3721,9 +3873,11 @@ export async function adminAcceptAndAssignTutorBooking(
                 phone: targetTutorPhone,
                 monthlyFee: targetTutorFee,
                 avatar: targetTutorAvatar,
+                assignedAt: nowIso,
+                demoEndsAt: demoEndsAtIso,
                 status: 'Active'
               },
-              updatedAt: new Date().toISOString()
+              updatedAt: nowIso
             }, { merge: true });
           }
         }
@@ -4673,6 +4827,13 @@ export function subscribeToTutorsRequests(
               const data = d.data();
               if (!data) return;
 
+              // If fake tutor profile, do not show in requests
+              const isFake = isFakeTutor(data) || isFakeTutor({ id: d.id, ...data });
+              if (isFake) {
+                requestsMap.delete(d.id);
+                return;
+              }
+
               // If already approved, do not show in pending requests
               const isApproved = Boolean(data.isApproved === true || data.status === 'approved');
               if (isApproved) {
@@ -4753,7 +4914,8 @@ export function subscribeToCompleteTutors(
                 data.status === 'approved' ||
                 (data.verified === true && data.status !== 'pending' && data.status !== 'rejected')
               );
-              if (!isApproved) {
+              const isFake = isFakeTutor(data) || isFakeTutor({ id: d.id, ...data });
+              if (!isApproved || isFake) {
                 tutorsMap.delete(d.id);
                 return;
               }

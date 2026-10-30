@@ -143,6 +143,30 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
     date: string;
   } | null>(null);
 
+  // Sync modal-open state with document.body to ensure BottomNav bar hides when any profile popup is active
+  const isAnyProfileModalOpen = Boolean(
+    isEditModalOpen ||
+    isSalaryModalOpen ||
+    isAvailabilityModalOpen ||
+    isLiveClassModalOpen ||
+    isMessageModalOpen ||
+    isWithdrawModalOpen ||
+    selectedReceipt ||
+    showLogoutConfirm ||
+    payFeeModalBooking
+  );
+
+  useEffect(() => {
+    if (isAnyProfileModalOpen) {
+      document.body.classList.add('modal-open');
+      window.dispatchEvent(new Event('modal-state-change'));
+      return () => {
+        document.body.classList.remove('modal-open');
+        window.dispatchEvent(new Event('modal-state-change'));
+      };
+    }
+  }, [isAnyProfileModalOpen]);
+
   // Common Profile fields
   const [liveUser, setLiveUser] = useState<AppUserProfile | null>(user);
   const isTeacher = (liveUser?.role || user?.role) === 'teacher';
@@ -1058,12 +1082,43 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                         const isAccepted = item.status === 'accepted' || item.status === 'assigned' || item.status === 'confirmed';
                         const isDeclined = item.status === 'declined' || item.status === 'rejected';
                         const isPending = !isAccepted && !isDeclined;
-                        const tutorName = item.assignedTutorName || item.requestedTutorName || item.tutorName || item.name || 'Specialized Home Tutor';
-                        const tutorFee = item.assignedTutorFee || item.requestedTutorMonthlyFee || item.monthlyFee;
-                        const tutorPhone = item.assignedTutorPhone || item.phone;
-                        const tutorSubjects = Array.isArray(item.subjects) ? item.subjects.join(', ') : (item.subjects || 'Home Tuition');
+                        // Dynamically reflect changed tutor assigned by admin as per availability
+                        const tutorName =
+                          item.assignedTutorName ||
+                          (isAccepted && activeUserData?.assignedTutor ? activeUserData.assignedTutor : '') ||
+                          item.requestedTutorName ||
+                          item.tutorName ||
+                          item.name ||
+                          'Specialized Home Tutor';
+                        const tutorFee =
+                          item.assignedTutorFee ||
+                          (isAccepted && activeUserData?.feesAmount ? activeUserData.feesAmount : 0) ||
+                          item.requestedTutorMonthlyFee ||
+                          item.monthlyFee;
+                        const tutorPhone =
+                          item.assignedTutorPhone ||
+                          (isAccepted && activeUserData?.assignedTutorPhone ? activeUserData.assignedTutorPhone : '') ||
+                          item.phone;
+                        const tutorSubjects = Array.isArray(item.subjects)
+                          ? item.subjects.join(', ')
+                          : (item.subjects || (isAccepted && activeUserData?.assignedEducator?.subjects ? (Array.isArray(activeUserData.assignedEducator.subjects) ? activeUserData.assignedEducator.subjects.join(', ') : activeUserData.assignedEducator.subjects) : 'Home Tuition'));
                         const sName = item.studentName || childName;
                         const sGrade = item.studentGrade || childGrade;
+
+                        // Payment Status & 3-Day Demo Trial Period Calculation
+                        const payStatus = getTutorPaymentStatus(
+                          item.id,
+                          item.assignedTutorId || item.requestedTutorId || item.id,
+                          parentFeeRecords,
+                          activeUserData
+                        );
+                        const confirmedTime = item.assignedAt || item.confirmedAt || item.createdAt || activeUserData?.assignedAt;
+                        const confirmedDateMs = confirmedTime ? new Date(confirmedTime).getTime() : Date.now();
+                        const daysElapsed = Math.floor((Date.now() - confirmedDateMs) / (1000 * 60 * 60 * 24));
+                        const demoDaysRemaining = Math.max(1, 3 - daysElapsed);
+                        const demoDayNumber = Math.min(3, Math.max(1, daysElapsed + 1));
+                        const isDemoTrial = isAccepted && !payStatus.isPaid && daysElapsed < 3;
+                        const isDemoDue = isAccepted && !payStatus.isPaid && daysElapsed >= 3;
 
                         return (
                           <div
@@ -1089,10 +1144,28 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                               <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <h4 className="font-bold text-sm text-slate-900 truncate">{tutorName}</h4>
-                                  {isAccepted && (
+                                  {isAccepted && isDemoTrial && (
+                                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1 shadow-2xs">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse" />
+                                      <span>3-Day Demo in Progress (Day {demoDayNumber} of 3 • {demoDaysRemaining}d left)</span>
+                                    </span>
+                                  )}
+                                  {isAccepted && isDemoDue && (
+                                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1 shadow-2xs animate-pulse">
+                                      <AlertCircle className="w-3 h-3 text-rose-600" />
+                                      <span>Demo Completed • Tuition Fee Due</span>
+                                    </span>
+                                  )}
+                                  {isAccepted && payStatus.isPaid && (
                                     <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1 shadow-2xs">
                                       <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                                      <span>✓ Booking Accepted</span>
+                                      <span>✓ Enrolled &amp; Fee Paid ({payStatus.daysRemaining}d left)</span>
+                                    </span>
+                                  )}
+                                  {isAccepted && !isDemoTrial && !isDemoDue && !payStatus.isPaid && (
+                                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1 shadow-2xs">
+                                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                      <span>✓ Booking Accepted &amp; Assigned</span>
                                     </span>
                                   )}
                                   {isPending && (
@@ -1124,12 +1197,40 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                                     <span className="text-emerald-700 font-bold">₹{tutorFee}/month</span>
                                   )}
                                 </div>
-                                {isAccepted && (
-                                  <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-700 font-semibold">
-                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                                    <span>Admin Reaction: Accepted &amp; Confirmed for Home Tuition!</span>
+
+                                {/* 3-Day Demo Period Notice Banner */}
+                                {isAccepted && isDemoTrial && (
+                                  <div className="mt-2.5 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2 shadow-2xs">
+                                    <Clock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                                    <div>
+                                      <span className="font-bold text-amber-900">3-Day Free Demo Class Time</span>
+                                      <p className="text-[11px] text-amber-700 mt-0.5">
+                                        Your 3-day demo class period is in progress (Day {demoDayNumber} of 3). Tuition fee (₹{tutorFee || 3000}) is payable after 3 days of confirmation ({demoDaysRemaining} day{demoDaysRemaining > 1 ? 's' : ''} remaining).
+                                      </p>
+                                    </div>
                                   </div>
                                 )}
+
+                                {/* Demo Ended & Fee Due Notice Banner */}
+                                {isAccepted && isDemoDue && (
+                                  <div className="mt-2.5 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-start gap-2 shadow-2xs">
+                                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                                    <div>
+                                      <span className="font-bold text-rose-900">3-Day Demo Period Concluded — Fee Payment Due</span>
+                                      <p className="text-[11px] text-rose-700 mt-0.5">
+                                        The 3-day demo trial period has finished. Please pay the monthly tuition fee of ₹{tutorFee || 3000} to confirm and continue regular classes with {tutorName}.
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {isAccepted && !isDemoTrial && !isDemoDue && (
+                                  <div className="mt-1.5 flex items-center gap-1.5 text-xs text-emerald-700 font-semibold">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                    <span>Admin Reaction: Confirmed &amp; Assigned Home Tutor!</span>
+                                  </div>
+                                )}
+
                                 {isDeclined && (
                                   <div className="mt-2 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-start gap-2">
                                     <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
@@ -1175,15 +1276,8 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                                     )}
                                   </div>
 
-                                  {/* Pay Fee / Pay Now Button / Paid Status directly at bottom of Message & Call buttons */}
+                                  {/* Pay Fee Button / Demo Timing / Paid Status */}
                                   {(() => {
-                                    const payStatus = getTutorPaymentStatus(
-                                      item.id,
-                                      item.assignedTutorId || item.requestedTutorId || item.id,
-                                      parentFeeRecords,
-                                      activeUserData
-                                    );
-
                                     if (payStatus.isPaid) {
                                       return (
                                         <button
@@ -1202,31 +1296,50 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                                               });
                                             }
                                           }}
-                                          title={`Tuition active for next ${payStatus.daysRemaining} days (due ${payStatus.nextDueDate}). Click to view receipt.`}
+                                          title={`Tuition active for next ${payStatus.daysRemaining} days (due ${payStatus.nextDueDate}). Click to view official receipt.`}
                                           className="w-full px-3.5 py-1.5 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-300 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all shadow-xs"
                                         >
                                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                                          <span>Paid ({payStatus.daysRemaining}d left)</span>
+                                          <span>Paid ({payStatus.daysRemaining}d left) • Receipt</span>
                                         </button>
                                       );
                                     }
 
-                                    // If previous payment was made and 28 days have passed -> Display prominent "Pay Now" button asking for recurring payment
-                                    if (payStatus.isOverdue) {
+                                    // If 3-Day Demo is active -> Parent is in demo period; tuition fee payable after 3 days
+                                    if (isDemoTrial) {
+                                      return (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            alert(
+                                              `3-Day Demo Class in Progress (Day ${demoDayNumber} of 3).\n\nAs per Kumari Institute policy, the 3 days are the free demo trial period. The parent pays the monthly tuition fee after 3 days of confirmation when the demo classes conclude.\n\nPayment will unlock in ${demoDaysRemaining} day${demoDaysRemaining > 1 ? 's' : ''}.`
+                                            );
+                                          }}
+                                          className="w-full px-3.5 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all shadow-xs"
+                                          title={`3-day demo class in progress. Tuition fee payment unlocks in ${demoDaysRemaining} day${demoDaysRemaining > 1 ? 's' : ''} after demo period concludes.`}
+                                        >
+                                          <Clock className="w-3.5 h-3.5 text-amber-700" />
+                                          <span>Demo Active • Fee Payable in {demoDaysRemaining}d</span>
+                                        </button>
+                                      );
+                                    }
+
+                                    // If 3-Day Demo is completed -> Prominent payment due button
+                                    if (isDemoDue || payStatus.isOverdue) {
                                       return (
                                         <button
                                           type="button"
                                           onClick={() => setPayFeeModalBooking(item)}
-                                          className="w-full px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-rose-600/25 animate-pulse transition-all"
-                                          title={`Monthly tuition cycle of 28 days has ended (due ${payStatus.nextDueDate}). Pay now to maintain regular classes.`}
+                                          className="w-full px-3.5 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-rose-600/25 animate-pulse transition-all"
+                                          title={`3-Day demo trial completed. Please pay monthly tuition fee of ₹${tutorFee || 3000} to confirm ongoing classes.`}
                                         >
                                           <CreditCard className="w-3.5 h-3.5 text-white" />
-                                          <span>Pay Now ({tutorFee ? `₹${tutorFee}` : 'Monthly'})</span>
+                                          <span>Pay Tuition Fee ({tutorFee ? `₹${tutorFee}` : 'Pay Now'}) • Demo Completed</span>
                                         </button>
                                       );
                                     }
 
-                                    // Initial first-time payment
+                                    // Default initial payment button
                                     return (
                                       <button
                                         type="button"
@@ -1234,7 +1347,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                                         className="w-full px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-amber-500/20 hover:scale-[1.02] transition-all"
                                       >
                                         <CreditCard className="w-3.5 h-3.5 text-slate-950" />
-                                        <span>Pay Now ({tutorFee ? `₹${tutorFee}` : 'Monthly'})</span>
+                                        <span>Pay Tuition Fee ({tutorFee ? `₹${tutorFee}` : 'Monthly'})</span>
                                       </button>
                                     );
                                   })()}
@@ -2162,7 +2275,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                   rawAmount: w.amount,
                   status:
                     w.status === 'approved'
-                      ? 'Approved & Transferred'
+                      ? 'Transaction Successfully Completed'
                       : w.status === 'pending'
                       ? 'Pending Admin Verification'
                       : 'Declined',
@@ -2176,7 +2289,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                   title: p.title || 'Tuition Remuneration',
                   date: p.date,
                   amount: p.amount,
-                  status: p.status || 'Settled',
+                  status: p.status === 'approved' || p.status === 'Settled' ? 'Transaction Successfully Completed' : (p.status || 'Settled'),
                   mode: p.mode || 'Bank Transfer',
                   utrNumber: p.utrNumber,
                   paymentSlipUrl: p.paymentSlipUrl,
@@ -2186,27 +2299,27 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
 
               return (
                 <>
-                  {/* Tutor Commission Transparency Notice inside Earnings Dashboard */}
-                  <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50/80 border border-amber-200/90 text-amber-950 space-y-1.5 shadow-2xs">
+                  {/* Dynamic Fee Calculation & 30-Day Maturation Notice */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-50 to-indigo-50/80 border border-blue-200/90 text-blue-950 space-y-1.5 shadow-2xs">
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <div className="flex items-center gap-2">
-                        <div className="w-5 h-5 rounded-md bg-amber-500 text-white flex items-center justify-center font-black text-xs shrink-0">
-                          %
+                        <div className="w-5 h-5 rounded-md bg-blue-600 text-white flex items-center justify-center font-black text-xs shrink-0">
+                          ₹
                         </div>
-                        <h4 className="text-xs font-extrabold text-amber-950">
-                          Automated 20% Commission Deducted • 80% Net Pay Accrued
+                        <h4 className="text-xs font-extrabold text-blue-950">
+                          Class &amp; Board Rate Based Tuition Earnings • 30-Day Maturation Cycle
                         </h4>
                       </div>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200/90 text-amber-900 border border-amber-300">
-                        Net Take-Home (80%)
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-200/90 text-blue-900 border border-blue-300">
+                        Direct Student Allocation
                       </span>
                     </div>
-                    <p className="text-[11px] text-amber-900 leading-relaxed font-medium">
-                      20% of the tuition fee has been automatically deducted as the institute administrative commission. All amounts below display your <strong>net 80% take-home earnings</strong>, eligible for withdrawal after each 28-day tuition period.
+                    <p className="text-[11px] text-blue-900 leading-relaxed font-medium">
+                      Tuition fees are calculated based on your required rates per class and board for each assigned student. Newly assigned student amounts are held in <strong>Pending Amount</strong> for 30 days of active tuition, after which they mature and move to <strong>Withdrawal Amount</strong>. When you withdraw, the requested amount is immediately deducted from your earnings balance to prevent duplicate claims.
                     </p>
                   </div>
 
-                  {/* Top Key Figures: Monthly Accrued, Pending Amount (under 30 days), and Current Amount (Available for withdrawal) */}
+                  {/* Top Key Figures: Monthly Accrued, Pending Amount (within 30 days), and Withdrawal Amount (Matured & Available) */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     {/* 1. Monthly Accrued Earnings */}
                     <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80">
@@ -2215,31 +2328,31 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                         ₹ {breakdown.totalMonthlyAccrued.toLocaleString('en-IN')}
                       </span>
                       <span className="text-[10px] text-slate-500 font-medium">
-                        {breakdown.studentCount} Active {breakdown.studentCount === 1 ? 'Student' : 'Students'} (₹{breakdown.tutorHourly}/hr • 30 hrs/mo)
+                        {breakdown.studentCount} Assigned {breakdown.studentCount === 1 ? 'Student' : 'Students'} (Class &amp; Board Rates)
                       </span>
                     </div>
 
-                    {/* 2. Pending Amount (Tuition cycle in progress, under 28 days) */}
+                    {/* 2. Pending Amount (Tuition cycle in progress, under 30 days) */}
                     <div className="p-3.5 rounded-xl bg-amber-50/70 border border-amber-200/90">
                       <div className="flex items-center justify-between">
                         <span className="text-[11px] text-amber-900 font-bold block">Pending Amount</span>
                         <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-200/70 text-amber-800 uppercase tracking-wider">
-                          Under 28 Days
+                          Within 30 Days
                         </span>
                       </div>
                       <span className="text-xl font-black text-amber-700 block mt-0.5">
                         ₹ {breakdown.pendingAmount.toLocaleString('en-IN')}
                       </span>
                       <span className="text-[10px] text-amber-800/80 font-medium block">
-                        80% fee of booked student; unlocks to Available Balance after 28 days
+                        Tuition cycle active; automatically moves to Withdrawal Amount after 30 days
                       </span>
                     </div>
 
-                    {/* 3. Current Amount (Completed month & available for withdrawal) */}
+                    {/* 3. Withdrawal Amount (Completed 30 days & available for withdrawal) */}
                     <div className="p-3.5 rounded-xl bg-emerald-50/80 border border-emerald-200/90 relative overflow-hidden flex flex-col justify-between">
                       <div>
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-emerald-900 font-bold block">Current Amount</span>
+                          <span className="text-[11px] text-emerald-900 font-bold block">Withdrawal Amount</span>
                           <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-200 text-emerald-900 uppercase tracking-wider">
                             Available Balance
                           </span>
@@ -2248,7 +2361,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                           ₹ {breakdown.currentAvailableBalance.toLocaleString('en-IN')}
                         </span>
                         <span className="text-[10px] text-emerald-800/80 font-medium block">
-                          Ready for direct settlement to your account
+                          Matured funds ready for withdrawal; claimed amount is immediately deducted
                         </span>
                       </div>
 
@@ -2277,29 +2390,52 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
                   {/* Current Active Batches / Revenue Breakdown */}
                   <div className="border border-slate-200/80 rounded-xl p-3.5 space-y-2 text-xs">
                     <div className="flex items-center justify-between pb-1.5 border-b border-slate-100 font-semibold text-slate-900">
-                      <span>Active Student Batch Breakdown</span>
+                      <span>Assigned Students &amp; Fee Breakdown</span>
                       <span className="text-[11px] text-emerald-600">₹ {breakdown.totalMonthlyAccrued.toLocaleString('en-IN')} Total / mo</span>
                     </div>
                     {assignedStudents.length > 0 ? (
-                      <div className="space-y-1.5 text-[11px]">
-                        {assignedStudents.map((std: any, sIdx: number) => {
-                          const rawMonthly = Number(std.monthlyFee) || (breakdown.tutorHourly * 30);
-                          const netEarnings = Math.round(rawMonthly * 0.8);
+                      <div className="space-y-2 text-[11px]">
+                        {(breakdown.studentsWithDetails || assignedStudents).map((std: any, sIdx: number) => {
+                          const fee = std.calculatedFee || Number(std.monthlyFee) || (breakdown.tutorHourly * 30);
+                          const isMatured = std.isMatured || (std.daysElapsed >= 30);
+                          const daysLeft = std.daysRemainingToMaturity ?? Math.max(0, 30 - (std.daysElapsed || 0));
+
                           return (
-                            <div key={std.id || sIdx} className="flex justify-between items-center text-slate-600">
-                              <span>{std.name} ({std.grade || ''} • {std.subject || ''})</span>
-                              <strong className="text-slate-900">
-                                ₹ {netEarnings.toLocaleString('en-IN')} / mo
-                              </strong>
+                            <div key={std.id || sIdx} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                              <div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-bold text-slate-900">{std.name}</span>
+                                  <span className="px-1.5 py-0.2 rounded text-[10px] bg-blue-100 text-blue-800 font-semibold">
+                                    {std.grade || 'Tuition Student'} {std.board ? `• ${std.board}` : ''}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 text-[10px] text-slate-500 mt-0.5">
+                                  <span>Parent: {std.parentName}</span>
+                                  <span>•</span>
+                                  <span>Slot: {std.timing}</span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  isMatured
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                    : 'bg-amber-100 text-amber-800 border border-amber-300'
+                                }`}>
+                                  {isMatured ? '✓ Matured (In Withdrawal)' : `⏳ Pending (${daysLeft}d left)`}
+                                </span>
+                                <strong className="text-slate-900 text-xs">
+                                  ₹ {fee.toLocaleString('en-IN')} / mo
+                                </strong>
+                              </div>
                             </div>
                           );
                         })}
                       </div>
                     ) : (
                       <div className="py-4 text-center text-slate-400 text-xs">
-                        <p className="font-semibold text-slate-600">No Active Student Batches</p>
+                        <p className="font-semibold text-slate-600">No Assigned Students Yet</p>
                         <p className="text-[11px] text-slate-400 mt-0.5">
-                          As students book home tuition or batch sessions with you, accrued earnings will calculate automatically.
+                          When admin assigns students to you, their fee will calculate as per your class and board rates.
                         </p>
                       </div>
                     )}
@@ -2314,71 +2450,78 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
 
                     {allTransactions.length > 0 ? (
                       <div className="divide-y divide-slate-100 border border-slate-200/80 rounded-xl overflow-hidden text-xs">
-                        {allTransactions.map((txn: any) => (
-                          <div key={txn.id} className="p-3 bg-white hover:bg-slate-50/70 transition-colors flex items-center justify-between gap-3">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-semibold text-slate-900">{txn.title}</span>
-                                <span
-                                  className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
-                                    txn.status.includes('Approved') || txn.status === 'Settled'
-                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                                      : txn.status.includes('Pending')
-                                      ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                      : 'bg-rose-50 text-rose-700 border-rose-100'
-                                  }`}
-                                >
-                                  {txn.status}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
-                                <span>Requested / Processed on {txn.date}</span>
-                                {txn.mode && (
-                                  <>
-                                    <span>•</span>
-                                    <span>{txn.mode}</span>
-                                  </>
-                                )}
-                                {txn.utrNumber && (
-                                  <>
-                                    <span>•</span>
-                                    <span className="font-mono text-slate-600">UTR: {txn.utrNumber}</span>
-                                  </>
-                                )}
-                              </div>
-                            </div>
+                        {allTransactions.map((txn: any) => {
+                          const isComplete =
+                            txn.status === 'Transaction Successfully Completed' ||
+                            txn.status.includes('Approved') ||
+                            txn.status === 'Settled';
 
-                            <div className="flex items-center gap-3 shrink-0">
-                              <span className="font-bold text-slate-900">{txn.amount}</span>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedReceipt({
-                                    id: txn.id,
-                                    date: txn.date,
-                                    description: txn.title,
-                                    amount: txn.amount,
-                                    status: txn.status,
-                                    utrNumber: txn.utrNumber,
-                                    transferMethod: txn.mode,
-                                    paymentSlipUrl: txn.paymentSlipUrl,
-                                    adminNote: txn.adminNote
-                                  });
-                                }}
-                                className="px-2.5 py-1 rounded-lg text-xs font-semibold text-blue-600 hover:text-blue-700 hover:bg-blue-50 border border-blue-200 cursor-pointer transition-colors"
-                              >
-                                View Slip
-                              </button>
+                          return (
+                            <div key={txn.id} className="p-3 bg-white hover:bg-slate-50/70 transition-colors flex items-center justify-between gap-3">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-semibold text-slate-900">{txn.title}</span>
+                                  <span
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                                      isComplete
+                                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200 shadow-2xs'
+                                        : txn.status.includes('Pending')
+                                        ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                        : 'bg-rose-50 text-rose-700 border-rose-100'
+                                    }`}
+                                  >
+                                    {isComplete ? '✓ Transaction Successfully Completed' : txn.status}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
+                                  <span>{isComplete ? 'Completed on' : 'Requested on'} {txn.date}</span>
+                                  {txn.mode && (
+                                    <>
+                                      <span>•</span>
+                                      <span>{txn.mode}</span>
+                                    </>
+                                  )}
+                                  {txn.utrNumber && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="font-mono text-emerald-700 font-bold">UTR: {txn.utrNumber}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-3 shrink-0">
+                                <span className="font-black text-slate-900">{txn.amount}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedReceipt({
+                                      id: txn.id,
+                                      date: txn.date,
+                                      description: txn.title,
+                                      amount: txn.amount,
+                                      status: isComplete ? 'Transaction Successfully Completed' : txn.status,
+                                      utrNumber: txn.utrNumber,
+                                      transferMethod: txn.mode,
+                                      paymentSlipUrl: txn.paymentSlipUrl,
+                                      adminNote: txn.adminNote
+                                    });
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg text-xs font-semibold text-blue-600 hover:text-blue-700 hover:bg-blue-50 border border-blue-200 cursor-pointer transition-colors"
+                                >
+                                  View Voucher
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     ) : (
                       <div className="py-6 text-center text-slate-400 text-xs bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
                         <Receipt className="w-6 h-6 mx-auto mb-1 text-slate-300" />
                         <p className="font-semibold text-slate-600">No Payout Disbursements Yet</p>
                         <p className="text-[11px] text-slate-400 mt-0.5">
-                          When you withdraw funds and the admin transfers payment, UTR records and bank slips will appear here.
+                          When you withdraw funds and the admin transfers payment, UTR records and bank slips will appear here showing the transaction successfully completed.
                         </p>
                       </div>
                     )}
@@ -2941,7 +3084,15 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
           aria-modal="true"
           className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4"
         >
-          <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-xl border border-slate-200 space-y-4 text-center">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-xl border border-slate-200 space-y-4 text-center relative">
+            <button
+              type="button"
+              onClick={() => setShowLogoutConfirm(false)}
+              className="absolute top-3.5 right-3.5 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-colors cursor-pointer"
+              aria-label="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
             <div className="w-10 h-10 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
               <LogOut className="w-5 h-5" />
             </div>

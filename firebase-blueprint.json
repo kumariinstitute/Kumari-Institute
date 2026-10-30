@@ -244,6 +244,52 @@
         "createdAt": { "type": "string", "description": "ISO creation timestamp" }
       },
       "required": ["url"]
+    },
+    "tutor_bookings": {
+      "title": "Tutor Bookings",
+      "description": "Lifecycle record of parent tutor bookings, admin acceptances, and tutor assignments",
+      "properties": {
+        "id": { "type": "string", "description": "Booking ID" },
+        "parentUid": { "type": "string", "description": "Parent user ID" },
+        "parentName": { "type": "string", "description": "Parent full name" },
+        "parentPhone": { "type": "string", "description": "Parent phone" },
+        "studentName": { "type": "string", "description": "Student name" },
+        "studentGrade": { "type": "string", "description": "Student grade / class" },
+        "requestedTutorId": { "type": "string", "description": "Original requested tutor ID" },
+        "requestedTutorName": { "type": "string", "description": "Original requested tutor name" },
+        "assignedTutorId": { "type": "string", "description": "Admin assigned / changed tutor ID" },
+        "assignedTutorName": { "type": "string", "description": "Admin assigned / changed tutor name" },
+        "assignedTutorFee": { "type": "number", "description": "Tuition fee per month" },
+        "assignedTutorPhone": { "type": "string", "description": "Assigned tutor contact" },
+        "status": { "type": "string", "description": "Booking status: pending, accepted, declined" },
+        "assignedAt": { "type": "string", "description": "Assignment timestamp" },
+        "demoEndsAt": { "type": "string", "description": "3-day demo class expiry timestamp" },
+        "createdAt": { "type": "string", "description": "Booking creation ISO timestamp" }
+      },
+      "required": ["parentName", "studentName", "status"]
+    },
+    "received_fees": {
+      "title": "Received Fees",
+      "description": "Official tuition fee payment receipts from parents after 3-day demo class period",
+      "properties": {
+        "id": { "type": "string", "description": "Receipt ID" },
+        "receiptNo": { "type": "string", "description": "Official receipt number e.g. KI-FEE-202610-XYZ" },
+        "transactionId": { "type": "string", "description": "Bank UTR or gateway transaction ID" },
+        "parentUid": { "type": "string", "description": "Parent user ID" },
+        "parentName": { "type": "string", "description": "Parent name" },
+        "parentPhone": { "type": "string", "description": "Parent contact phone" },
+        "studentName": { "type": "string", "description": "Student name" },
+        "tutorId": { "type": "string", "description": "Tutor ID" },
+        "tutorName": { "type": "string", "description": "Tutor name" },
+        "amount": { "type": "number", "description": "Tuition fee paid in INR" },
+        "formattedAmount": { "type": "string", "description": "Formatted fee e.g. ₹3,500" },
+        "paymentMethod": { "type": "string", "description": "Payment mode (UPI, PhonePe / GPay, etc.)" },
+        "status": { "type": "string", "description": "paid or completed" },
+        "paidAt": { "type": "string", "description": "Payment timestamp" },
+        "nextDueDate": { "type": "string", "description": "Next cycle due date" },
+        "billingPeriod": { "type": "string", "description": "Billing description" }
+      },
+      "required": ["receiptNo", "parentName", "amount", "status"]
     }
   },
   "firestore": {
@@ -290,6 +336,14 @@
     "/hero_banners/{bannerId}": {
       "schema": "hero_banners",
       "description": "Homepage hero banner images"
+    },
+    "/tutor_bookings/{bookingId}": {
+      "schema": "tutor_bookings",
+      "description": "Home tutor bookings and assigned tutors"
+    },
+    "/received_fees/{feeId}": {
+      "schema": "received_fees",
+      "description": "Tuition fee payment receipts and financial vouchers"
     }
   }
 }

@@ -58,8 +58,24 @@ export const ProgramDetailModal: React.FC<ProgramDetailModalProps> = ({
     }
   };
 
+  // Ensure bottom navigation bar is hidden while modal is open
+  React.useEffect(() => {
+    if (program) {
+      document.body.classList.add('modal-open');
+      window.dispatchEvent(new Event('modal-state-change'));
+      return () => {
+        document.body.classList.remove('modal-open');
+        window.dispatchEvent(new Event('modal-state-change'));
+      };
+    }
+  }, [program]);
+
+  if (!program) return null;
+
   return (
     <div
+      role="dialog"
+      aria-modal="true"
       id="program-detail-modal-overlay"
       className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200"
       onClick={(e) => e.target === e.currentTarget && onClose()}

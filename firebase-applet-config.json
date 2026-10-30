@@ -1,10 +1,12 @@
 {
-  "apiKey": "AIzaSyCyCjCJRX3L2XmUvGZuWOAFuYim7fW4Ru4",
-  "authDomain": "kumari-institute-2a4ae.firebaseapp.com",
-  "projectId": "kumari-institute-2a4ae",
-  "storageBucket": "kumari-institute-2a4ae.firebasestorage.app",
-  "messagingSenderId": "514105287551",
-  "appId": "1:514105287551:web:9b975fb59f31acbd22f04a",
-  "measurementId": "G-GMNHV6VY3J",
-  "databaseId": "kumari-db"
+  "projectId": "kumari-2512d",
+  "appId": "1:899188453613:web:3833e121236cd60f4d5ce4",
+  "apiKey": "AIzaSyBKapNAJTeUYMdHGDe5hb6L4RTQ5u4ALQU",
+  "authDomain": "kumari-2512d.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-kumariinstitute-1c3e9f63-3db3-4c82-b109-cfe8f156bf1a",
+  "storageBucket": "kumari-2512d.firebasestorage.app",
+  "messagingSenderId": "899188453613",
+  "measurementId": "",
+  "oAuthClientId": "899188453613-g1g4bh7emo9ifhf6g2ms14tsvpgiacgd.apps.googleusercontent.com",
+  "recaptchaSiteKey": ""
 }

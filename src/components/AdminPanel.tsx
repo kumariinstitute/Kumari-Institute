@@ -28,6 +28,7 @@ import {
   RefreshCw,
   AlertCircle,
   ZoomIn,
+  ZoomOut,
   MessageSquare,
   Ban,
   Upload,
@@ -148,7 +149,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     | 'incoming_bookings'
     | 'parents'
     | 'tutors_requests'
-    | 'unprofile_tutors'
     | 'tutors_directory'
     | 'complete_tutors'
     | 'received_fees'
@@ -178,9 +178,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [cloudTestResult, setCloudTestResult] = useState<Record<string, { ok: boolean; count?: number; error?: string }> | null>(null);
   const [isCloudBannerDismissed, setIsCloudBannerDismissed] = useState<boolean>(false);
   const [isRulesCopied, setIsRulesCopied] = useState<boolean>(false);
-
-  // Un-profile updated tutors search state
-  const [unprofileSearch, setUnprofileSearch] = useState<string>('');
 
   // Received Fees state
   const [receivedFeesList, setReceivedFeesList] = useState<ReceivedFeeRecord[]>([]);
@@ -249,6 +246,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Certificate Lightbox Preview Modal state
   const [previewCertDoc, setPreviewCertDoc] = useState<{ title: string; url: string; details?: string } | null>(null);
+  const [certZoom, setCertZoom] = useState<number>(1);
 
   // 2. Bookings & Assignment state
   const [bookings, setBookings] = useState<HomeTutorBooking[]>([]);
@@ -361,6 +359,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [isPublishingReview, setIsPublishingReview] = useState<boolean>(false);
   const [reviewFilterTutorId, setReviewFilterTutorId] = useState<string>('all');
   const [isMobileNavOpen, setIsMobileNavOpen] = useState<boolean>(false);
+
+  // Sync modal-open class with document.body and dispatch event so BottomNav bar hides completely
+  const isAnyAdminModalOpen = Boolean(
+    selectedTutorForReview ||
+    previewCertDoc ||
+    reassignModalBooking ||
+    declineModalBooking ||
+    directAssignParent ||
+    connectParentTargetTutor ||
+    selectedWithdrawalForTransfer ||
+    viewingWithdrawalReceipt ||
+    isRecordPaymentModalOpen ||
+    selectedLogForDetail
+  );
+
+  useEffect(() => {
+    if (isAnyAdminModalOpen) {
+      document.body.classList.add('modal-open');
+      window.dispatchEvent(new Event('modal-state-change'));
+      return () => {
+        document.body.classList.remove('modal-open');
+        window.dispatchEvent(new Event('modal-state-change'));
+      };
+    }
+  }, [isAnyAdminModalOpen]);
 
   // Close notification popover on click outside
   useEffect(() => {
@@ -627,7 +650,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setCloudTestResult(results);
       const permDenied = Object.values(results).some((r) => r.error === 'permission-denied');
       if (permDenied) {
-        showToast('error', '⚠️ Firestore kumari-db returned permission-denied. Rules require update in Firebase Console.');
+        showToast('error', '⚠️ Firestore returned permission-denied. Rules require update in Firebase Console.');
       } else {
         showToast('success', '✓ Direct Cloud Firestore query succeeded! Collections verified.');
       }
@@ -841,9 +864,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       (t.qualification && (t.addressSnippet || t.locationArea))
     );
   };
-
-  // Registered tutors who have NOT yet completed/updated their profile
-  const unprofileUpdatedTutors = tutors.filter((t) => !isTutorProfileUpdated(t));
 
   // Registered tutors who HAVE completed their profile (eligible for verification and directory)
   const profileUpdatedTutors = tutors.filter((t) => isTutorProfileUpdated(t));
@@ -2147,32 +2167,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 )}
               </button>
 
-              {/* 3b. Un-Profile Updated Tutors */}
-              <button
-                type="button"
-                id="admin-tab-unprofile-tutors"
-                onClick={() => {
-                  setActiveTab('unprofile_tutors');
-                  setIsMobileNavOpen(false);
-                }}
-                className={`w-full px-3 py-2.5 rounded-xl font-bold flex items-center justify-between transition-all cursor-pointer text-left ${
-                  activeTab === 'unprofile_tutors'
-                    ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800/80'
-                }`}
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <Clock className="w-4 h-4 shrink-0 text-amber-400" />
-                  <span className="truncate">Un-Profile Updated Tutors</span>
-                </div>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${
-                  activeTab === 'unprofile_tutors'
-                    ? 'bg-slate-950 text-amber-300'
-                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                }`}>
-                  {unprofileUpdatedTutors.length}
-                </span>
-              </button>
+
 
               {/* 4. Confirm Tutors Details */}
               <button
@@ -2692,10 +2687,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="text-sm font-bold text-white">
-                    Cloud Firestore: <span className="font-mono text-amber-400">kumari-db</span>
+                    Cloud Firestore: <span className="font-mono text-emerald-400">Primary Database</span>
                   </h3>
                   <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
-                    Project: kumari-institute-2a4ae
+                    Project: kumari-2512d
                   </span>
                   {firestoreNotice?.code === 'permission-denied' ? (
                     <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1">
@@ -2710,7 +2705,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   )}
                 </div>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  Multi-collection listening across <code className="text-amber-300">parents</code>, <code className="text-amber-300">tutors_requests</code>, <code className="text-amber-300">confirm_tutors_details</code>, and <code className="text-amber-300">complete_tutors</code>.
+                  Single primary database connection on project <code className="text-emerald-300">kumari-2512d</code>.
                 </p>
               </div>
             </div>
@@ -2728,11 +2723,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </button>
 
               <a
-                href="https://console.firebase.google.com/project/kumari-institute-2a4ae/firestore/databases/kumari-db/rules"
+                href="https://console.firebase.google.com/project/kumari-2512d/firestore/rules"
                 target="_blank"
                 rel="noreferrer"
                 className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
-                title="Open Firebase Console Security Rules for kumari-db"
+                title="Open Firebase Console Security Rules for kumari-2512d"
               >
                 <span>Console Rules</span>
                 <ExternalLink className="w-3.5 h-3.5" />
@@ -2787,7 +2782,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       Firebase Console Rules Lock Detected (<code className="text-rose-300">permission-denied</code>)
                     </h4>
                     <p className="text-slate-300 mt-1 leading-relaxed">
-                      Your website is connected to <strong className="text-white">kumari-db</strong>, but Firestore Security Rules on your Firebase Console currently block public read/write requests. Local server storage is actively serving all records so no data is lost. To enable immediate live cloud sync directly from Firebase, copy and publish these open rules in the Firebase Console:
+                      Your website is connected to <strong className="text-white">kumari-2512d</strong>, but Firestore Security Rules on your Firebase Console currently block public read/write requests. Local server storage is actively serving all records so no data is lost. To enable immediate live cloud sync directly from Firebase, copy and publish these open rules in the Firebase Console:
                     </p>
                   </div>
                 </div>
@@ -2831,15 +2826,15 @@ service cloud.firestore {
 
               <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] text-slate-400">
                 <span>
-                  Paste into: <strong>Firebase Console → Build → Firestore Database → kumari-db → Rules</strong> tab → click <strong>Publish</strong>.
+                  Paste into: <strong>Firebase Console → Build → Firestore Database → Rules</strong> tab → click <strong>Publish</strong>.
                 </span>
                 <a
-                  href="https://console.firebase.google.com/project/kumari-institute-2a4ae/firestore/databases/kumari-db/rules"
+                  href="https://console.firebase.google.com/project/kumari-2512d/firestore/rules"
                   target="_blank"
                   rel="noreferrer"
                   className="text-amber-400 hover:underline flex items-center gap-1 font-bold"
                 >
-                  <span>Open kumari-db Rules Tab →</span>
+                  <span>Open Firebase Rules Tab →</span>
                 </a>
               </div>
             </div>
@@ -3410,221 +3405,8 @@ service cloud.firestore {
           />
         )}
 
-        {/* =========================================================================
-            TAB: UN-PROFILE UPDATED TUTORS (Registered Tutors Pending Profile Completion)
-           ========================================================================= */}
-        {activeTab === 'unprofile_tutors' && (
-          <div className="space-y-6 animate-in fade-in duration-200">
-            {/* Header Description & Metrics Banner */}
-            <div className="bg-slate-800/80 rounded-3xl p-6 border border-slate-700/80 space-y-4">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-xl font-bold text-white">Un-Profile Updated Tutors</h2>
-                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                      {unprofileUpdatedTutors.length} Pending Completion
-                    </span>
-                  </div>
-                  <p className="text-xs sm:text-sm text-slate-400 max-w-3xl">
-                    All tutors who registered via Google Sign-In or Email but have not yet filled their complete teaching profile (subjects, class-wise fees, board options, and certificate marksheets) are listed here. Once a tutor logs in and completes their profile, they will automatically move to the <strong>Tutor Verification (Tutors Request)</strong> section for your approval and be removed from this section.
-                  </p>
-                </div>
+        {/* unprofile_tutors section removed */}
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveTab('tutors_requests');
-                      setTutorFilter('pending');
-                    }}
-                    className="px-4 py-2.5 rounded-2xl bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer"
-                  >
-                    <UserPlus className="w-4 h-4 text-amber-400" />
-                    <span>Go to Tutor Requests ({pendingTutorsCount})</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Search & Action Bar */}
-              <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t border-slate-700/60">
-                <div className="relative flex-1 max-w-md">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  <input
-                    type="text"
-                    value={unprofileSearch}
-                    onChange={(e) => setUnprofileSearch(e.target.value)}
-                    placeholder="Search by name, email, or phone..."
-                    className="w-full pl-9 pr-4 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
-                  />
-                  {unprofileSearch && (
-                    <button
-                      type="button"
-                      onClick={() => setUnprofileSearch('')}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs font-bold"
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const link = `${window.location.origin}/?openCompleteProfile=true`;
-                    navigator.clipboard.writeText(link);
-                    showToast('success', '✓ Copied Tutor Complete-Profile link to clipboard!');
-                  }}
-                  className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-700 text-amber-300 border border-amber-500/30 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-sm"
-                  title="Copy the public profile completion URL to send to registered tutors"
-                >
-                  <Copy className="w-3.5 h-3.5" />
-                  <span>Copy Complete Profile Link</span>
-                </button>
-              </div>
-            </div>
-
-            {/* List / Grid of Unprofiled Tutors */}
-            {(() => {
-              const filteredList = unprofileUpdatedTutors.filter((t) => {
-                if (!unprofileSearch.trim()) return true;
-                const q = unprofileSearch.toLowerCase().trim();
-                return (
-                  t.name?.toLowerCase().includes(q) ||
-                  t.email?.toLowerCase().includes(q) ||
-                  (t.phone && t.phone.toLowerCase().includes(q))
-                );
-              });
-
-              if (filteredList.length === 0) {
-                return (
-                  <div className="bg-slate-800/60 rounded-3xl p-12 text-center border border-slate-700/60 space-y-3">
-                    <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 text-emerald-400 mx-auto flex items-center justify-center border border-emerald-500/20">
-                      <CheckCircle2 className="w-7 h-7" />
-                    </div>
-                    <h3 className="text-lg font-bold text-white">
-                      {unprofileSearch ? 'No matching tutors found' : 'No Incomplete Tutor Profiles'}
-                    </h3>
-                    <p className="text-xs text-slate-400 max-w-md mx-auto">
-                      {unprofileSearch
-                        ? 'Try adjusting your search keywords.'
-                        : 'All registered tutors in the system have submitted their full profile and certificates. They are currently in the Tutors Request verification section or Tutors Directory.'}
-                    </p>
-                  </div>
-                );
-              }
-
-              return (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                  {filteredList.map((tutor) => (
-                    <div
-                      key={tutor.id}
-                      className="bg-slate-800 rounded-3xl p-5 border border-amber-500/30 flex flex-col justify-between transition-all hover:border-amber-500/60 shadow-lg shadow-black/20"
-                    >
-                      <div className="space-y-4">
-                        {/* Tutor Header */}
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-center gap-3">
-                            {tutor.avatar ? (
-                              <img
-                                src={tutor.avatar}
-                                alt={tutor.name}
-                                className="w-12 h-12 rounded-2xl object-cover border-2 border-slate-700 shrink-0"
-                              />
-                            ) : (
-                              <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-300 font-bold flex items-center justify-center text-lg border border-amber-500/30 shrink-0">
-                                {tutor.name?.charAt(0) || 'T'}
-                              </div>
-                            )}
-                            <div>
-                              <h3 className="font-bold text-white text-base">{tutor.name || 'New Tutor'}</h3>
-                              <p className="text-xs text-amber-400 font-semibold">
-                                {tutor.qualification || 'Educator (Pending Details)'}
-                              </p>
-                              <span className="text-[10px] text-slate-400">
-                                Registered: {tutor.createdAt ? new Date(tutor.createdAt).toLocaleDateString() : 'Recent'}
-                              </span>
-                            </div>
-                          </div>
-
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 shrink-0">
-                            Profile Incomplete
-                          </span>
-                        </div>
-
-                        {/* Contact details */}
-                        <div className="space-y-1.5 text-xs text-slate-300 bg-slate-900/60 p-3 rounded-2xl border border-slate-800">
-                          {tutor.email && (
-                            <div className="flex items-center gap-2 truncate">
-                              <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                              <a href={`mailto:${tutor.email}`} className="truncate hover:text-amber-400">
-                                {tutor.email}
-                              </a>
-                            </div>
-                          )}
-                          <div className="flex items-center gap-2">
-                            <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            <span>{tutor.phone || 'Phone not yet provided'}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            <span>{tutor.locationArea || 'Rayagada'}</span>
-                          </div>
-                        </div>
-
-                        {/* Missing Requirements Checklist */}
-                        <div className="space-y-1.5 bg-amber-950/20 p-3 rounded-2xl border border-amber-500/20 text-xs">
-                          <span className="font-bold text-amber-300 block text-[11px] uppercase tracking-wider">
-                            Pending Profile Items:
-                          </span>
-                          <ul className="space-y-1 text-[11px] text-slate-300">
-                            <li className="flex items-center gap-1.5">
-                              <span className="text-amber-400 font-bold">✕</span>
-                              <span>Board Tuition Fees (CBSE &amp; ICSE Class 1-12)</span>
-                            </li>
-                            <li className="flex items-center gap-1.5">
-                              <span className="text-amber-400 font-bold">✕</span>
-                              <span>Mark sheet Uploads (10th, 12th, Degree)</span>
-                            </li>
-                            <li className="flex items-center gap-1.5">
-                              <span className="text-amber-400 font-bold">✕</span>
-                              <span>Government Aadhaar Card ID verification</span>
-                            </li>
-                          </ul>
-                        </div>
-                      </div>
-
-                      {/* Footer Actions */}
-                      <div className="pt-4 border-t border-slate-700/60 flex items-center justify-between gap-2 mt-4">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const link = `${window.location.origin}/?openCompleteProfile=true`;
-                            navigator.clipboard.writeText(link);
-                            showToast('success', `Copied profile completion link for ${tutor.name}`);
-                          }}
-                          className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-700 text-amber-300 text-xs font-bold border border-amber-500/30 flex items-center gap-1 transition-colors cursor-pointer"
-                        >
-                          <Copy className="w-3 h-3" />
-                          <span>Copy Link</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteTutor(tutor)}
-                          className="px-3 py-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-500/30 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
-                          title="Remove incomplete/test account"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                          <span>Remove</span>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
-          </div>
-        )}
 
         {/* =========================================================================
             TAB 4: CONFIRM TUTORS DETAILS (Collections: confirm_tutors_details & complete_tutors)
@@ -6816,15 +6598,19 @@ service cloud.firestore {
           DETAILED TUTOR CERTIFICATE & PROFILE PREVIEW MODAL
          ========================================================================= */}
       {selectedTutorForReview && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200"
+        >
           <div className="bg-slate-900 rounded-3xl max-w-4xl w-full shadow-2xl border border-slate-700 overflow-hidden relative my-6 max-h-[90vh] flex flex-col">
             {/* Header */}
-            <div className="bg-slate-950 p-6 border-b border-slate-800 flex items-center justify-between shrink-0">
+            <div className="bg-gradient-to-r from-[#0c2340] via-[#132e54] to-[#1e3a8a] text-white p-6 relative border-b border-slate-700/80 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3.5">
                 <img
                   src={selectedTutorForReview.avatar || '/src/assets/images/tutor_priya_sharma_1789370534007.jpg'}
                   alt={selectedTutorForReview.name}
-                  className="w-14 h-14 rounded-2xl object-cover border-2 border-amber-500/40 shrink-0"
+                  className="w-14 h-14 rounded-2xl object-cover border-2 border-amber-400/80 shrink-0 shadow-md"
                 />
                 <div>
                   <div className="flex items-center gap-2">
@@ -6833,9 +6619,9 @@ service cloud.firestore {
                       {selectedTutorForReview.qualification}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <p className="text-xs text-blue-100 mt-0.5">
                     {selectedTutorForReview.experienceYears}+ Yrs Exp • {selectedTutorForReview.locationArea || 'Rayagada'} •{' '}
-                    <span className="text-emerald-400 font-bold">₹{selectedTutorForReview.monthlyFee}/month</span>
+                    <span className="text-emerald-300 font-bold">₹{selectedTutorForReview.monthlyFee}/month</span>
                   </p>
                 </div>
               </div>
@@ -6843,7 +6629,8 @@ service cloud.firestore {
               <button
                 type="button"
                 onClick={() => setSelectedTutorForReview(null)}
-                className="w-9 h-9 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center cursor-pointer transition-colors"
+                className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer ring-1 ring-white/20 shadow-xs"
+                aria-label="Close"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -6861,32 +6648,36 @@ service cloud.firestore {
               {/* Document and Fee calculations */}
               {(() => {
                 const tenthDocUrl =
+                  selectedTutorForReview.tenthMarksheetUrl ||
                   selectedTutorForReview.certificates?.tenth?.url ||
                   (selectedTutorForReview.educationDetails as any)?.tenth?.marksheetUrl ||
-                  (selectedTutorForReview as any)?.tenthMarksheetUrl ||
+                  (selectedTutorForReview as any)?.documents?.tenthMarksheet ||
                   (selectedTutorForReview as any)?.tenthImage?.imgbbUrl ||
                   (selectedTutorForReview as any)?.tenthImage?.dataUrl ||
                   '';
 
                 const twelfthDocUrl =
+                  selectedTutorForReview.twelfthMarksheetUrl ||
                   selectedTutorForReview.certificates?.twelfth?.url ||
                   (selectedTutorForReview.educationDetails as any)?.twelfth?.marksheetUrl ||
-                  (selectedTutorForReview as any)?.twelfthMarksheetUrl ||
+                  (selectedTutorForReview as any)?.documents?.twelfthMarksheet ||
                   (selectedTutorForReview as any)?.twelfthImage?.imgbbUrl ||
                   (selectedTutorForReview as any)?.twelfthImage?.dataUrl ||
                   '';
 
                 const degreeDocUrl =
+                  selectedTutorForReview.degreeCertificateUrl ||
                   selectedTutorForReview.certificates?.degree?.url ||
                   (selectedTutorForReview.educationDetails as any)?.degree?.marksheetUrl ||
-                  (selectedTutorForReview as any)?.degreeCertificateUrl ||
+                  (selectedTutorForReview as any)?.documents?.degreeCertificate ||
                   (selectedTutorForReview as any)?.degreeImage?.imgbbUrl ||
                   (selectedTutorForReview as any)?.degreeImage?.dataUrl ||
                   '';
 
                 const aadhaarDocUrl =
-                  selectedTutorForReview.certificates?.idProof?.url ||
                   selectedTutorForReview.aadhaarDocUrl ||
+                  selectedTutorForReview.certificates?.idProof?.url ||
+                  (selectedTutorForReview as any)?.documents?.aadhaarCard ||
                   (selectedTutorForReview as any)?.aadhaarImage?.imgbbUrl ||
                   (selectedTutorForReview as any)?.aadhaarImage?.dataUrl ||
                   (selectedTutorForReview as any)?.aadhaarImage ||
@@ -6896,6 +6687,7 @@ service cloud.firestore {
                 const avatarPhotoUrl =
                   selectedTutorForReview.avatar ||
                   (selectedTutorForReview as any)?.photoUrl ||
+                  (selectedTutorForReview as any)?.documents?.profilePhoto ||
                   (selectedTutorForReview as any)?.profilePhoto?.imgbbUrl ||
                   '';
 
@@ -7379,50 +7171,113 @@ service cloud.firestore {
          ========================================================================= */}
       {previewCertDoc && (
         <div
-          className="fixed inset-0 z-60 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-in fade-in"
-          onClick={() => setPreviewCertDoc(null)}
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-60 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in"
+          onClick={() => {
+            setPreviewCertDoc(null);
+            setCertZoom(1);
+          }}
         >
           <div
-            className="bg-slate-900 rounded-3xl max-w-3xl w-full border border-slate-700 shadow-2xl overflow-hidden relative"
+            className="bg-slate-900 rounded-3xl max-w-4xl w-full border border-slate-700 shadow-2xl overflow-hidden relative flex flex-col max-h-[92vh]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
-              <div>
-                <h4 className="font-bold text-white text-sm sm:text-base">{previewCertDoc.title}</h4>
-                {previewCertDoc.details && <p className="text-xs text-slate-400">{previewCertDoc.details}</p>}
-              </div>
+            {/* Header */}
+            <div className="p-5 sm:p-6 bg-gradient-to-r from-[#0c2340] via-[#132e54] to-[#1e3a8a] text-white border-b border-slate-700/80 relative shrink-0">
               <button
                 type="button"
-                onClick={() => setPreviewCertDoc(null)}
-                className="w-8 h-8 rounded-full bg-slate-800 text-slate-300 hover:text-white flex items-center justify-center cursor-pointer"
+                onClick={() => {
+                  setPreviewCertDoc(null);
+                  setCertZoom(1);
+                }}
+                className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer ring-1 ring-white/20 shadow-xs"
+                aria-label="Close"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
+
+              <div className="flex items-center gap-2 text-amber-300 text-xs font-bold uppercase tracking-wider mb-1">
+                <FileCheck className="w-4 h-4 text-amber-400" />
+                <span>Verification Document Preview</span>
+              </div>
+              <h4 className="font-black text-white text-lg sm:text-xl tracking-tight pr-12">
+                {previewCertDoc.title}
+              </h4>
+              {previewCertDoc.details && (
+                <p className="text-xs sm:text-sm text-blue-100 mt-1">{previewCertDoc.details}</p>
+              )}
             </div>
 
-            <div className="p-4 max-h-[75vh] overflow-auto flex items-center justify-center bg-slate-950">
+            {/* Zoom toolbar */}
+            <div className="px-5 py-2.5 bg-slate-950/95 border-b border-slate-800 flex items-center justify-between text-xs text-slate-300 shrink-0">
+              <span className="text-[11px] text-slate-400 font-medium">
+                Zoom level: <strong className="text-white">{Math.round(certZoom * 100)}%</strong>
+              </span>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setCertZoom((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))))}
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1 border border-slate-700 cursor-pointer"
+                  title="Zoom Out"
+                >
+                  <ZoomOut className="w-3.5 h-3.5" />
+                  <span>Out</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCertZoom(1)}
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 cursor-pointer"
+                  title="Reset Zoom"
+                >
+                  100%
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCertZoom((z) => Math.min(3, Number((z + 0.25).toFixed(2))))}
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1 border border-slate-700 cursor-pointer"
+                  title="Zoom In"
+                >
+                  <ZoomIn className="w-3.5 h-3.5" />
+                  <span>In</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Document display viewport */}
+            <div className="p-4 flex-1 overflow-auto flex items-center justify-center bg-slate-950 min-h-[350px] max-h-[65vh]">
               {previewCertDoc.url ? (
-                <img
-                  src={previewCertDoc.url}
-                  alt={previewCertDoc.title}
-                  className="max-h-[70vh] w-auto object-contain rounded-xl border border-slate-800 shadow-2xl"
-                />
+                <div
+                  className="transition-transform duration-200 ease-out origin-center"
+                  style={{ transform: `scale(${certZoom})` }}
+                >
+                  <img
+                    src={previewCertDoc.url}
+                    alt={previewCertDoc.title}
+                    className="max-h-[60vh] w-auto max-w-full object-contain rounded-xl border border-slate-800 shadow-2xl"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLElement).style.opacity = '0.6';
+                    }}
+                  />
+                </div>
               ) : (
-                <div className="p-10 text-center text-slate-400 text-sm">
-                  Document preview not available
+                <div className="p-12 text-center text-slate-400 text-sm">
+                  Document preview image not available
                 </div>
               )}
             </div>
 
-            <div className="p-3 bg-slate-950 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
-              <span>Official Academic &amp; Verification Document</span>
+            {/* Footer */}
+            <div className="p-3.5 bg-slate-950 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400 shrink-0">
+              <span>Official Academic &amp; Verification Document (Kumari Institute)</span>
               <a
                 href={previewCertDoc.url}
                 target="_blank"
                 rel="noreferrer"
-                className="text-amber-400 font-bold hover:underline flex items-center gap-1"
+                className="text-amber-400 font-bold hover:underline flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 cursor-pointer"
               >
-                <span>Open in New Tab</span>
+                <span>Open Original in New Tab</span>
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
             </div>
@@ -7434,23 +7289,36 @@ service cloud.firestore {
           RE-ASSIGN TUTOR MODAL (Admin assigns new tutor to parent)
          ========================================================================= */}
       {reassignModalBooking && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-slate-900 rounded-3xl max-w-xl w-full border border-slate-700 shadow-2xl p-6 space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div>
-                <h3 className="font-bold text-white text-base">Assign Home Tutor to Parent</h3>
-                <p className="text-xs text-slate-400">
-                  Student: <span className="text-white font-semibold">{reassignModalBooking.studentName}</span> ({reassignModalBooking.studentGrade})
-                </p>
-              </div>
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in"
+        >
+          <div className="bg-slate-900 rounded-3xl max-w-xl w-full border border-slate-700 shadow-2xl overflow-hidden relative my-6">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-[#0c2340] via-[#132e54] to-[#1e3a8a] text-white p-6 relative border-b border-slate-700/80">
               <button
                 type="button"
                 onClick={() => setReassignModalBooking(null)}
-                className="w-8 h-8 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center cursor-pointer"
+                className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer ring-1 ring-white/20 shadow-xs"
+                aria-label="Close"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
+
+              <div className="flex items-center gap-2 text-amber-300 text-xs font-bold uppercase tracking-wider mb-1">
+                <UserPlus className="w-4 h-4 text-amber-400" />
+                <span>Home Tutor Assignment Desk</span>
+              </div>
+              <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                Assign Home Tutor to Parent
+              </h3>
+              <p className="text-xs sm:text-sm text-blue-100 mt-1">
+                Student: <span className="text-white font-bold">{reassignModalBooking.studentName}</span> ({reassignModalBooking.studentGrade}) • Parent: {reassignModalBooking.parentName}
+              </p>
             </div>
+
+            <div className="p-6 space-y-5">
 
             <div className="space-y-3">
               <label className="block text-xs font-bold text-slate-300">
@@ -7498,6 +7366,7 @@ service cloud.firestore {
                 Confirm Tutor Assignment
               </button>
             </div>
+            </div>
           </div>
         </div>
       )}
@@ -7506,7 +7375,11 @@ service cloud.firestore {
           DECLINE BOOKING MODAL (Admin declines parent booking request with reason)
          ========================================================================= */}
       {declineModalBooking && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
+        >
           <div className="bg-slate-900 rounded-3xl max-w-xl w-full border border-rose-500/40 shadow-2xl p-6 space-y-5">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2.5">
@@ -7626,7 +7499,11 @@ service cloud.firestore {
           DIRECT TUTOR ASSIGNMENT MODAL (Assign approved tutor to unassigned parent)
          ========================================================================= */}
       {directAssignParent && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
+        >
           <div className="bg-slate-900 rounded-3xl max-w-xl w-full border border-indigo-500/40 shadow-2xl p-6 space-y-5">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2.5">
@@ -7796,7 +7673,11 @@ service cloud.firestore {
           CONNECT PARENT TO TUTOR MODAL (Initiated from Tutors Directory)
          ========================================================================= */}
       {connectParentTargetTutor && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
+        >
           <div className="bg-slate-900 rounded-3xl max-w-xl w-full border border-amber-500/40 shadow-2xl p-6 space-y-5">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2.5">
