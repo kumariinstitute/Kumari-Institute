@@ -120,6 +120,20 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // Strict Tutor Escape Lock: If an unverified/incomplete tutor navigates away or escapes, log them out immediately to the tutor login page
+  const handleTutorEscapeLogout = async () => {
+    try {
+      await logoutUserFromFirebase();
+    } catch (err) {
+      console.warn('Tutor escape logout notice:', err);
+    }
+    setCurrentUser(null);
+    setIsCompletingTeacherProfile(false);
+    setAuthInitialRole('teacher');
+    setAuthInitialMode('login');
+    setActiveTab('auth');
+  };
+
   // MOBILE BACK BUTTON FEATURE: Go back 1 step rather than exit the page
   useEffect(() => {
     try {
@@ -155,9 +169,14 @@ export default function App() {
         return;
       }
 
-      // 3. If filling complete teacher profile, step back to dashboard/home
+      // 3. If filling complete teacher profile:
+      // If profile is not completed, escaping logs tutor out and sends to tutor login page!
       if (isCompletingTeacherProfile) {
-        setIsCompletingTeacherProfile(false);
+        if (!currentUser?.profileCompleted) {
+          handleTutorEscapeLogout();
+        } else {
+          setIsCompletingTeacherProfile(false);
+        }
         return;
       }
 
@@ -447,11 +466,22 @@ export default function App() {
             isCompletingTeacherProfile ? (
               <TeacherCompleteProfilePage
                 currentUser={currentUser}
-                onBackToDashboard={() => setIsCompletingTeacherProfile(false)}
-                onNavigateHome={() => {
-                  setIsCompletingTeacherProfile(false);
-                  handleNavigateHome();
+                onBackToDashboard={() => {
+                  if (!currentUser?.profileCompleted) {
+                    handleTutorEscapeLogout();
+                  } else {
+                    setIsCompletingTeacherProfile(false);
+                  }
                 }}
+                onNavigateHome={() => {
+                  if (!currentUser?.profileCompleted) {
+                    handleTutorEscapeLogout();
+                  } else {
+                    setIsCompletingTeacherProfile(false);
+                    handleNavigateHome();
+                  }
+                }}
+                onEscapeLogout={handleTutorEscapeLogout}
                 onProfileSaved={(updated) => {
                   if (updated) setCurrentUser(updated);
                   setIsCompletingTeacherProfile(false);

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import {
   loginWithGoogleFirebase,
+  logoutUserFromFirebase,
   formatFirebaseError,
   AppUserProfile
 } from '../services/firebaseAuth';
@@ -109,11 +110,23 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
   // If navigating directly to teacher complete profile
   if (mode === 'teacher-complete-profile' || initialMode === 'teacher-complete-profile') {
+    const handleTutorExit = async () => {
+      try {
+        await logoutUserFromFirebase();
+      } catch (err) {
+        console.warn('Logout notice:', err);
+      }
+      setMode('login');
+      setRole('teacher');
+      setLoginError('The profile upload form is mandatory for tutors. You have been logged out. Please log in and complete your profile.');
+    };
+
     return (
       <TeacherCompleteProfilePage
         currentUser={currentUser}
-        onBackToDashboard={onNavigateProfile || onNavigateHome}
-        onNavigateHome={onNavigateHome}
+        onBackToDashboard={handleTutorExit}
+        onNavigateHome={handleTutorExit}
+        onEscapeLogout={handleTutorExit}
         onProfileSaved={(updated) => {
           if (onLoginSuccess && updated) onLoginSuccess(updated);
           if (onNavigateProfile) onNavigateProfile();

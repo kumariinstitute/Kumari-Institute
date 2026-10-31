@@ -50,6 +50,7 @@ interface TeacherCompleteProfilePageProps {
   onBackToDashboard: () => void;
   onNavigateHome: () => void;
   onProfileSaved?: (updatedUser: AppUserProfile) => void;
+  onEscapeLogout?: () => void;
 }
 
 export interface UploadedFileMeta {
@@ -100,7 +101,9 @@ export const ALL_SUPPORTED_BOARDS = ['CBSE', 'ICSE', 'State Board'] as const;
 export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProps> = ({
   currentUser,
   onBackToDashboard,
-  onProfileSaved
+  onNavigateHome,
+  onProfileSaved,
+  onEscapeLogout
 }) => {
   const draftKey = `teacher_profile_draft_${currentUser?.uid || 'guest'}`;
 
@@ -112,6 +115,25 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
     (currentUser as any)?.status === 'approved' ||
     (currentUser as any)?.verified === true
   );
+
+  const [isExitModalOpen, setIsExitModalOpen] = useState(false);
+
+  const handleAttemptExit = () => {
+    if (isAlreadyCompleted) {
+      onBackToDashboard();
+    } else {
+      setIsExitModalOpen(true);
+    }
+  };
+
+  const handleConfirmExitLogout = () => {
+    setIsExitModalOpen(false);
+    if (onEscapeLogout) {
+      onEscapeLogout();
+    } else {
+      onBackToDashboard();
+    }
+  };
 
   // 1. Personal Information State
   const [fullName, setFullName] = useState(currentUser?.name || currentUser?.fullName || '');
@@ -1780,18 +1802,88 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
         </div>
       )}
 
+      {/* Exit Confirmation Modal for Incomplete Profile */}
+      {isExitModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-slate-200 text-left space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-lg font-black text-slate-900">
+                Exit Mandatory Profile Form?
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-600 mt-2 leading-relaxed">
+                The profile upload form is <strong>mandatory for all home tutors</strong>. If you exit or escape now, you will be <strong>directly logged out</strong> and returned to the Tutor Login page.
+              </p>
+            </div>
+            <div className="p-3 rounded-2xl bg-amber-50/80 border border-amber-200/80 text-[11px] text-amber-900 font-medium">
+              💡 Your entered details are autosaved locally as a draft. However, you must complete and submit the form to become an active tutor.
+            </div>
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsExitModalOpen(false)}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs sm:text-sm cursor-pointer transition-colors"
+              >
+                Stay & Complete Profile
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmExitLogout}
+                className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs sm:text-sm cursor-pointer shadow-md transition-colors"
+              >
+                Log Out & Exit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-6 sm:pt-8">
         {/* Back Link Button */}
-        <div className="mb-6">
-          <button
-            type="button"
-            onClick={onBackToDashboard}
-            className="inline-flex items-center gap-2 text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors group cursor-pointer"
-          >
-            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
-            <span>Back to My Profile</span>
-          </button>
+        <div className="mb-6 flex items-center justify-between">
+          {isAlreadyCompleted ? (
+            <button
+              type="button"
+              onClick={handleAttemptExit}
+              className="inline-flex items-center gap-2 text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors group cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+              <span>Back to My Profile</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleAttemptExit}
+              className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 border border-red-200 text-xs sm:text-sm font-bold text-red-700 transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Exit & Log Out to Tutor Login</span>
+            </button>
+          )}
+
+          {!isAlreadyCompleted && (
+            <span className="text-[11px] font-bold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
+              Mandatory Step 1 of 1
+            </span>
+          )}
         </div>
+
+        {/* Mandatory Lock Notice Banner for First-Time Tutors */}
+        {!isAlreadyCompleted && (
+          <div className="mb-6 p-4 rounded-2xl bg-amber-50/90 border border-amber-200/90 text-left space-y-2">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-amber-700 shrink-0" />
+              <h2 className="text-xs sm:text-sm font-bold text-amber-950 uppercase tracking-wide">
+                Mandatory Tutor Profile Registration
+              </h2>
+            </div>
+            <p className="text-xs text-amber-900 leading-relaxed font-medium">
+              All educators must complete and submit this profile form (including contact information, 10th & 12th certificates, class fees, and Aadhaar card) for verification. <strong>If you attempt to navigate back or escape without submitting, you will be automatically logged out and returned to the Tutor Login screen.</strong>
+            </p>
+          </div>
+        )}
 
         {/* Page Title & Subtitle */}
         <div className="mb-6">
@@ -3098,11 +3190,11 @@ export const TeacherCompleteProfilePage: React.FC<TeacherCompleteProfilePageProp
           <div className="flex items-center justify-between pt-5 border-t border-slate-200">
             <button
               type="button"
-              onClick={onBackToDashboard}
+              onClick={handleAttemptExit}
               className="inline-flex items-center gap-2 px-5 sm:px-6 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-semibold text-xs sm:text-sm transition-all cursor-pointer shadow-2xs"
             >
               <X className="w-4 h-4 text-slate-500" />
-              <span>Close</span>
+              <span>{isAlreadyCompleted ? 'Close' : 'Cancel & Exit (Logs Out)'}</span>
             </button>
 
             <button

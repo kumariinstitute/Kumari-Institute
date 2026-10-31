@@ -3,6 +3,8 @@ import { getAuth } from "firebase/auth";
 import { initializeFirestore, getFirestore, doc, getDoc, setLogLevel, Firestore } from "firebase/firestore";
 import { getAnalytics, isSupported } from "firebase/analytics";
 
+import firebaseAppletConfig from "../../firebase-applet-config.json";
+
 // Silence noisy internal network retry messages from the Firebase SDK
 try {
   setLogLevel("silent");
@@ -11,15 +13,15 @@ try {
 }
 
 // Your web app's Firebase configuration
-// Primary, main and one and only database for the website
+// Primary and only Cloud Firestore database for the website
 export const firebaseConfig = {
-  apiKey: "AIzaSyBKapNAJTeUYMdHGDe5hb6L4RTQ5u4ALQU",
-  authDomain: "kumari-2512d.firebaseapp.com",
-  projectId: "kumari-2512d",
-  storageBucket: "kumari-2512d.firebasestorage.app",
-  messagingSenderId: "899188453613",
-  appId: "1:899188453613:web:4ac3f26f40d545324d5ce4",
-  measurementId: "G-ZVQGYSMNH5"
+  apiKey: firebaseAppletConfig.apiKey || "AIzaSyBKapNAJTeUYMdHGDe5hb6L4RTQ5u4ALQU",
+  authDomain: firebaseAppletConfig.authDomain || "kumari-2512d.firebaseapp.com",
+  projectId: firebaseAppletConfig.projectId || "kumari-2512d",
+  storageBucket: firebaseAppletConfig.storageBucket || "kumari-2512d.firebasestorage.app",
+  messagingSenderId: firebaseAppletConfig.messagingSenderId || "899188453613",
+  appId: firebaseAppletConfig.appId || "1:899188453613:web:3833e121236cd60f4d5ce4",
+  measurementId: firebaseAppletConfig.measurementId || ""
 };
 
 // Initialize Firebase app singleton
@@ -28,21 +30,29 @@ export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfi
 // Initialize Firebase Authentication
 export const auth = getAuth(app);
 
-// Primary and only Cloud Firestore Database Instance
+// New Cloud Firestore Database ID from configuration
+export const FIRESTORE_DATABASE_ID =
+  firebaseAppletConfig.firestoreDatabaseId ||
+  "ai-studio-kumariinstitute-1c3e9f63-3db3-4c82-b109-cfe8f156bf1a";
+
+// Primary Cloud Firestore Database Instance targeting the new database
 let firestoreInstance: Firestore;
 try {
-  firestoreInstance = initializeFirestore(app, {
-    experimentalAutoDetectLongPolling: true,
-  });
+  firestoreInstance = initializeFirestore(
+    app,
+    {
+      experimentalAutoDetectLongPolling: true,
+    },
+    FIRESTORE_DATABASE_ID
+  );
 } catch {
-  firestoreInstance = getFirestore(app);
+  firestoreInstance = getFirestore(app, FIRESTORE_DATABASE_ID);
 }
 
 // One and only primary Firestore database
 export const db = firestoreInstance;
 export const defaultDb = db;
 export const allDbInstances = [db];
-export const FIRESTORE_DATABASE_ID = "(default)";
 
 // Real-time connection status state for UI feedback
 export interface FirestoreConnectionState {
@@ -63,7 +73,7 @@ export async function verifyFirestoreConnection(): Promise<FirestoreConnectionSt
 
     return {
       connected: true,
-      databaseId: "(default)",
+      databaseId: FIRESTORE_DATABASE_ID,
       projectId: firebaseConfig.projectId,
       lastChecked: new Date().toISOString()
     };
@@ -78,7 +88,7 @@ export async function verifyFirestoreConnection(): Promise<FirestoreConnectionSt
     }
     return {
       connected: false,
-      databaseId: "(default)",
+      databaseId: FIRESTORE_DATABASE_ID,
       projectId: firebaseConfig.projectId,
       error: friendlyError,
       lastChecked: new Date().toISOString()

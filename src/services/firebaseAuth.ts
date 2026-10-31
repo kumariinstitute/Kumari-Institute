@@ -135,6 +135,7 @@ export interface UserProgressMetric {
 export interface AppUserProfile {
   uid: string;
   name: string;
+  fullName?: string;
   email: string;
   role: 'parent' | 'teacher' | 'admin';
   phone?: string;
@@ -340,16 +341,36 @@ export async function syncUserToPersistence(profile: AppUserProfile): Promise<vo
     console.warn('[Sync] Server user store notice:', err);
   }
 
-  // 3. Cloud Firestore - saved directly to parents or teachers (no users collection)
+  // 3. Cloud Firestore - saved directly to parents or teachers across all database instances
   try {
     const cleanPayload = removeUndefinedFields(profile);
-    if (profile.role === 'teacher') {
-      await setDoc(doc(db, "teachers", profile.uid), cleanPayload, { merge: true });
-    } else if (profile.role === 'parent') {
-      await setDoc(doc(db, "parents", profile.uid), cleanPayload, { merge: true });
+    for (const dbInst of allDbInstances) {
+      try {
+        if (profile.role === 'teacher') {
+          await setDoc(doc(dbInst, "teachers", profile.uid), cleanPayload, { merge: true });
+          await setDoc(doc(dbInst, "tutors", profile.uid), cleanPayload, { merge: true });
+        } else if (profile.role === 'parent') {
+          await setDoc(doc(dbInst, "parents", profile.uid), cleanPayload, { merge: true });
+        }
+      } catch (colErr) {
+        console.warn(`[Sync] Firestore db instance write notice (${profile.role}):`, colErr);
+      }
     }
   } catch (fsErr) {
     console.warn('[Sync] Cloud Firestore store notice:', fsErr);
+  }
+
+  // 4. Dedicated /api/parents sync for parent users
+  if (profile.role === 'parent') {
+    try {
+      await fetch('/api/parents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profile)
+      });
+    } catch {
+      // server sync optional
+    }
   }
 }
 
@@ -1044,10 +1065,10 @@ export async function loginUserWithFirebase(
                     backupData || {};
 
   const role: 'parent' | 'teacher' =
+    expectedRole ||
     foundData.role ||
     (parentDocSnap && parentDocSnap.exists() ? 'parent' : null) ||
     (teacherDocSnap && teacherDocSnap.exists() ? 'teacher' : null) ||
-    expectedRole ||
     'parent';
 
   const enrolledCourses: EnrolledCourse[] =
@@ -1225,20 +1246,61 @@ export async function loginWithGoogleFirebase(
   const now = new Date().toISOString();
 
   if (existingProfile) {
-    const role = existingProfile.role || expectedRole;
+    // If logging in from tutor login, enforce teacher role; if from parent login, enforce parent role
+    const role = expectedRole || existingProfile.role || 'parent';
     const updated: AppUserProfile = {
       ...existingProfile,
       uid: firebaseUser.uid,
       name: existingProfile.name || displayName,
+      fullName: existingProfile.fullName || existingProfile.name || displayName,
       email: email,
+      phone: existingProfile.phone || firebaseUser.phoneNumber || '',
       role,
       emailVerified: true,
       avatar: existingProfile.avatar || firebaseUser.photoURL || undefined,
       lastLoginAt: now,
     };
+
+    if (role === 'parent') {
+      const parentData = removeUndefinedFields({
+        uid: firebaseUser.uid,
+        id: firebaseUser.uid,
+        name: updated.name,
+        fullName: updated.name,
+        email: email,
+        phone: updated.phone || '',
+        gender: updated.gender || 'male',
+        role: 'parent',
+        locality: updated.locality || 'Rayagada',
+        childName: updated.childName || '',
+        childGrade: updated.childGrade || '',
+        childSchool: updated.childSchool || '',
+        childBoard: updated.childBoard || '',
+        enrolledCourses: updated.enrolledCourses || [],
+        hiredTutors: updated.hiredTutors || [],
+        bookedTutors: updated.bookedTutors || [],
+        course: updated.course || (updated.childGrade ? `${updated.childGrade} Tuition` : 'Home Tuition'),
+        feesAmount: updated.feesAmount || 0,
+        assignedTutor: updated.assignedTutor || '',
+        assignedTutorId: updated.assignedTutorId || '',
+        assignedTutorPhone: updated.assignedTutorPhone || '',
+        assignedEducator: updated.assignedEducator || null,
+        createdAt: updated.createdAt || now,
+        lastLoginAt: now,
+        emailVerified: true
+      });
+      for (const dbInst of allDbInstances) {
+        try {
+          await setDoc(doc(dbInst, "parents", firebaseUser.uid), parentData, { merge: true });
+        } catch (colErr) {
+          console.warn('[Google Auth] Parents collection write error:', colErr);
+        }
+      }
+    }
+
     saveUserSessionToStorage(updated);
     saveUserToLocalRegistry(updated);
-    syncUserToPersistence(updated).catch(() => {});
+    await syncUserToPersistence(updated).catch(() => {});
     return updated;
   }
 
@@ -1246,6 +1308,7 @@ export async function loginWithGoogleFirebase(
   const newProfile: AppUserProfile = {
     uid: firebaseUser.uid,
     name: displayName,
+    fullName: displayName,
     email: email,
     phone: firebaseUser.phoneNumber || '',
     role: expectedRole,
@@ -1253,9 +1316,10 @@ export async function loginWithGoogleFirebase(
     emailVerified: true,
     profileCompleted: false,
     avatar: firebaseUser.photoURL || undefined,
-    locality: '',
+    locality: 'Rayagada',
     enrolledCourses: [],
     hiredTutors: [],
+    bookedTutors: [],
     demoBookings: [],
     tasks: [],
     progress: {},
@@ -1266,15 +1330,29 @@ export async function loginWithGoogleFirebase(
   if (expectedRole === 'parent') {
     const parentData = removeUndefinedFields({
       ...newProfile,
+      id: firebaseUser.uid,
       fullName: displayName,
       childName: '',
       childGrade: '',
       childBoard: '',
       childSchool: '',
       enrolledCourses: [],
-      hiredTutors: []
+      hiredTutors: [],
+      bookedTutors: [],
+      course: 'Home Tuition',
+      feesAmount: 0,
+      assignedTutor: '',
+      assignedTutorId: '',
+      assignedTutorPhone: '',
+      assignedEducator: null
     });
-    await setDoc(doc(db, "parents", firebaseUser.uid), parentData, { merge: true }).catch(() => {});
+    for (const dbInst of allDbInstances) {
+      try {
+        await setDoc(doc(dbInst, "parents", firebaseUser.uid), parentData, { merge: true });
+      } catch (colErr) {
+        console.warn('[Google Auth] New parent store error:', colErr);
+      }
+    }
   } else {
     // Simple teacher account without GPS/location in register form
     const teacherData = removeUndefinedFields({
@@ -1292,13 +1370,19 @@ export async function loginWithGoogleFirebase(
       reviewCount: 0,
       profileCompleted: false
     });
-    await setDoc(doc(db, "teachers", firebaseUser.uid), teacherData, { merge: true }).catch(() => {});
-    await setDoc(doc(db, "tutors_requests", firebaseUser.uid), teacherData, { merge: true }).catch(() => {});
+    for (const dbInst of allDbInstances) {
+      try {
+        await setDoc(doc(dbInst, "teachers", firebaseUser.uid), teacherData, { merge: true });
+        await setDoc(doc(dbInst, "tutors_requests", firebaseUser.uid), teacherData, { merge: true });
+      } catch (colErr) {
+        console.warn('[Google Auth] New teacher store error:', colErr);
+      }
+    }
   }
 
   saveUserSessionToStorage(newProfile);
   saveUserToLocalRegistry(newProfile);
-  syncUserToPersistence(newProfile).catch(() => {});
+  await syncUserToPersistence(newProfile).catch(() => {});
   return newProfile;
 }
 

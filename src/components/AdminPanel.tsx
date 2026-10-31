@@ -2692,6 +2692,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
                     Project: kumari-2512d
                   </span>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 font-mono">
+                    DB: {FIRESTORE_DATABASE_ID}
+                  </span>
                   {firestoreNotice?.code === 'permission-denied' ? (
                     <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1">
                       <AlertCircle className="w-3 h-3" />
@@ -2705,7 +2708,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   )}
                 </div>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  Single primary database connection on project <code className="text-emerald-300">kumari-2512d</code>.
+                  Single primary database connection on project <code className="text-emerald-300">kumari-2512d</code> (database: <code className="text-indigo-300">{FIRESTORE_DATABASE_ID}</code>).
                 </p>
               </div>
             </div>

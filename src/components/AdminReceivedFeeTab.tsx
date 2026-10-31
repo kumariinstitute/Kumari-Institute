@@ -22,9 +22,11 @@ import {
   AlertCircle,
   Loader2,
   X,
-  ArrowRight
+  ArrowRight,
+  Trash2
 } from 'lucide-react';
-import { ReceivedFeeRecord, formatINR } from '../services/feePaymentService';
+import { ReceivedFeeRecord, formatINR, deleteReceivedFeeRecord, clearAllLocalReceivedFeeCache } from '../services/feePaymentService';
+import { FIRESTORE_DATABASE_ID } from '../lib/firebase';
 
 interface AdminReceivedFeeTabProps {
   receivedFees: ReceivedFeeRecord[];
@@ -48,6 +50,30 @@ export const AdminReceivedFeeTab: React.FC<AdminReceivedFeeTabProps> = ({
   >('all');
   const [selectedFeeModal, setSelectedFeeModal] = useState<ReceivedFeeRecord | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
+
+  const handleDeleteFee = async (fee: ReceivedFeeRecord) => {
+    if (
+      window.confirm(
+        `Are you sure you want to delete fee receipt ${fee.receiptNo} for ${fee.studentName}? This will permanently remove it from Cloud Firestore received_fees.`
+      )
+    ) {
+      setIsDeletingId(fee.id);
+      try {
+        await deleteReceivedFeeRecord(fee.id);
+        if (onRefresh) onRefresh();
+      } finally {
+        setIsDeletingId(null);
+      }
+    }
+  };
+
+  const handlePurgeAllLocalCache = () => {
+    if (window.confirm('Clear all legacy cached fee records from local storage?')) {
+      clearAllLocalReceivedFeeCache();
+      if (onRefresh) onRefresh();
+    }
+  };
 
   // Quick Date Preset Handler
   const handleDatePresetChange = (preset: 'all' | 'today' | 'this_week' | 'this_month' | 'custom') => {
@@ -219,7 +245,7 @@ export const AdminReceivedFeeTab: React.FC<AdminReceivedFeeTabProps> = ({
                 Received Fees Desk
               </h2>
               <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                Cloud Firestore Real-Time Sync
+                Cloud Firestore: {FIRESTORE_DATABASE_ID}
               </span>
             </div>
           </div>
@@ -672,6 +698,20 @@ export const AdminReceivedFeeTab: React.FC<AdminReceivedFeeTabProps> = ({
                         >
                           <Receipt className="w-3.5 h-3.5 text-emerald-400" />
                           <span>Receipt</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={isDeletingId === fee.id}
+                          onClick={() => handleDeleteFee(fee)}
+                          className="p-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 hover:text-white border border-rose-500/30 text-[11px] transition-all cursor-pointer inline-flex items-center"
+                          title="Delete Old / Test Fee Record"
+                        >
+                          {isDeletingId === fee.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-400" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
                         </button>
                       </div>
                     </td>

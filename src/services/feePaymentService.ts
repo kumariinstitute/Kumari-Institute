@@ -4,6 +4,7 @@ import {
   setDoc,
   getDoc,
   updateDoc,
+  deleteDoc,
   onSnapshot,
   query,
   orderBy,
@@ -468,17 +469,12 @@ const getLocalReceivedFees = (parentUidFilter?: string): ReceivedFeeRecord[] => 
 
 /**
  * Real-time subscription to `received_fees` collection for Admin and Parent
+ * Accurately syncs with the primary Firestore database
  */
 export function subscribeToReceivedFees(
   callback: (records: ReceivedFeeRecord[]) => void,
   parentUidFilter?: string
 ): () => void {
-  // Emit locally cached fees first
-  const localList = getLocalReceivedFees(parentUidFilter);
-  if (localList.length > 0) {
-    callback(localList);
-  }
-
   try {
     const colRef = collection(db, 'received_fees');
     const q = query(colRef, orderBy('paidAt', 'desc'));
@@ -493,28 +489,50 @@ export function subscribeToReceivedFees(
             list.push(item);
           }
         });
-        if (list.length > 0) {
-          try {
-            localStorage.setItem('kumari_received_fees', JSON.stringify(list));
-          } catch {}
-          callback(list);
-        } else if (localList.length > 0) {
-          callback(localList);
-        } else {
-          callback([]);
-        }
+        try {
+          localStorage.setItem('kumari_received_fees', JSON.stringify(list));
+        } catch {}
+        // Always reflect exact live Firestore state (empty array if 0 records)
+        callback(list);
       },
       (err) => {
         console.warn('[paymentService] subscribeToReceivedFees notice:', err);
-        const fallback = getLocalReceivedFees(parentUidFilter);
-        callback(fallback);
+        callback([]);
       }
     );
 
     return unsubscribe;
   } catch (err) {
     console.warn('[paymentService] Error setting up listener:', err);
-    callback(getLocalReceivedFees(parentUidFilter));
+    callback([]);
     return () => {};
   }
+}
+
+/**
+ * Delete a specific fee record from Firestore `received_fees` collection
+ * (Admin functionality to clean up any legacy or test fee records)
+ */
+export async function deleteReceivedFeeRecord(feeId: string): Promise<void> {
+  try {
+    const feeDocRef = doc(db, 'received_fees', feeId);
+    await deleteDoc(feeDocRef);
+  } catch (err) {
+    console.warn('[paymentService] Error deleting fee record from Firestore:', err);
+  }
+  try {
+    const raw = localStorage.getItem('kumari_received_fees') || '[]';
+    const existing = JSON.parse(raw);
+    const updated = existing.filter((r: any) => r.id !== feeId && r.receiptNo !== feeId);
+    localStorage.setItem('kumari_received_fees', JSON.stringify(updated));
+  } catch {}
+}
+
+/**
+ * Clear cached received fees from local storage
+ */
+export function clearAllLocalReceivedFeeCache(): void {
+  try {
+    localStorage.removeItem('kumari_received_fees');
+  } catch {}
 }
